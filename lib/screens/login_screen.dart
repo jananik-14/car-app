@@ -1,0 +1,203 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../widgets/primary_button.dart';
+import '../widgets/custom_text_field.dart';
+import '../theme/app_theme.dart';
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _mobileController = TextEditingController();
+
+  void _getOtp() {
+    // Navigate to OTP screen
+    context.push('/otp');
+  }
+
+  @override
+  void dispose() {
+    _mobileController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  icon: const Icon(Icons.bug_report),
+                  onPressed: () => context.push('/debug'),
+                  color: AppColors.outlineVariant,
+                ),
+              ),
+              // Brand Section
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: AppColors.outlineVariant.withOpacity(0.6),
+                  ),
+                ),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  height: 48,
+                  errorBuilder: (context, error, stackTrace) => const Text(
+                    'Wheels 2 Drive',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+              
+              // Interaction Card
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Enter your Mobile Number',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 16),
+                      CustomTextField(
+                        label: 'Mobile Number',
+                        hintText: '98765 43210',
+                        controller: _mobileController,
+                        keyboardType: TextInputType.phone,
+                        maxLength: 10,
+                        prefixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(width: 14),
+                            // India flag emoji
+                            const Text(
+                              '🇮🇳',
+                              style: TextStyle(fontSize: 20),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '+91',
+                              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    color: AppColors.onSurface,
+                                  ),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 1.5,
+                              height: 24,
+                              color: AppColors.outlineVariant.withOpacity(0.5),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      PrimaryButton(
+                        text: 'Get OTP',
+                        icon: Icons.arrow_forward,
+                        onPressed: _getOtp,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildFeatureItem(Icons.flash_on, 'Instant Access'),
+                          _buildDot(),
+                          _buildFeatureItem(Icons.shield, 'Zero Spam'),
+                          _buildDot(),
+                          _buildFeatureItem(Icons.gavel, 'Verified Auctions'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Footer
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24.0),
+                child: Text.rich(
+                  TextSpan(
+                    text: 'By continuing, you agree to our\n',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                    children: [
+                      TextSpan(
+                        text: 'Terms of Service',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      const TextSpan(text: ' & '),
+                      TextSpan(
+                        text: 'Privacy Policy',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: AppColors.secondaryContainer),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDot() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      width: 4,
+      height: 4,
+      decoration: BoxDecoration(
+        color: AppColors.outlineVariant,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
