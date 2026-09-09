@@ -64,13 +64,14 @@ class CustomTextField extends StatelessWidget {
               decoration: InputDecoration(
                 hintText: hintText,
                 hintStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.outlineVariant,
-                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade400,
+                      fontWeight: FontWeight.normal,
                     ),
                 prefixIcon: prefixIcon,
+                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
                 border: InputBorder.none,
                 counterText: '', // Hide default counter
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
               ),
             ),
           ),
