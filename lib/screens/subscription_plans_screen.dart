@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/responsive_layout_wrapper.dart';
 import '../widgets/shared_bottom_nav.dart';
+import '../services/auth_service.dart';
 
 // Simple global state for demonstration purposes
 String currentSubscriptionPlan = 'Starter';
@@ -21,6 +22,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildTopBar(),
+        _buildAdminToggle(),
         _buildTrustBadge(),
         _buildHeading(),
         Padding(
@@ -57,6 +59,50 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           scrollableContent,
           const SharedBottomNav(currentIndex: 3),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAdminToggle() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.amber.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.amber),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Admin Mode (Testing)',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '⚠️ DEV MODE ONLY - Remove before production',
+                    style: TextStyle(fontSize: 10, color: Colors.deepOrange.shade700, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: AuthService.currentUserRole == 'admin',
+              onChanged: (val) {
+                setState(() {
+                  AuthService.currentUserRole = val ? 'admin' : 'customer';
+                });
+              },
+              activeColor: Colors.amber,
+            ),
+          ],
+        ),
       ),
     );
   }

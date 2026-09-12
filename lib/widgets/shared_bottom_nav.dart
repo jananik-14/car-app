@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
 
 class SharedBottomNav extends StatelessWidget {
   final int currentIndex;
@@ -27,7 +28,11 @@ class SharedBottomNav extends StatelessWidget {
             context.go('/notifications');
             break;
           case 3:
-            context.go('/subscription');
+            if (AuthService.currentUserRole == 'admin') {
+              context.go('/admin');
+            } else {
+              context.go('/subscription');
+            }
             break;
         }
       },

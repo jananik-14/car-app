@@ -3,7 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'dart:math';
 
 class ConfirmationScreen extends StatelessWidget {
-  const ConfirmationScreen({super.key});
+  final String type;
+
+  const ConfirmationScreen({super.key, this.type = 'listing'});
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +114,7 @@ class ConfirmationScreen extends StatelessWidget {
                 
                 // Heading
                 Text(
-                  'Sent for Approval!',
+                  type == 'bid' ? 'Bid Placed Successfully!' : 'Sent for Approval!',
                   style: TextStyle(
                     color: navy,
                     fontSize: 28,
@@ -123,9 +125,11 @@ class ConfirmationScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 
                 // Description
-                const Text(
-                  'Your vehicle listing has been submitted. Our team will verify inspection records and activate your live auction within 2 hours.',
-                  style: TextStyle(
+                Text(
+                  type == 'bid'
+                      ? "Your bid has been submitted. You'll be notified immediately if you're outbid or if you win this auction."
+                      : 'Your vehicle listing has been submitted. Our team will verify inspection records and activate your live auction within 2 hours.',
+                  style: const TextStyle(
                     color: Colors.grey,
                     fontSize: 16,
                     height: 1.5,

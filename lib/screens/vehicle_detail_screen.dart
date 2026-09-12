@@ -342,7 +342,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                         height: 56,
                         child: ElevatedButton(
                           onPressed: () {
-                            context.push('/confirmation');
+                            context.push('/confirmation/bid');
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: orange,

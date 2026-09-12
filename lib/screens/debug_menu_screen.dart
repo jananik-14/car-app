@@ -16,7 +16,7 @@ class DebugMenuScreen extends StatelessWidget {
           ListTile(title: const Text('4. Browse Vehicles'), onTap: () => context.push('/browse')),
           ListTile(title: const Text('5. Vehicle Detail'), onTap: () => context.push('/vehicle_detail/1')),
           ListTile(title: const Text('6. Post Vehicle Form'), onTap: () => context.push('/post_vehicle')),
-          ListTile(title: const Text('7. Confirmation Screen'), onTap: () => context.push('/confirmation')),
+          ListTile(title: const Text('7. Confirmation Screen'), onTap: () => context.push('/confirmation/listing')),
           ListTile(title: const Text('8. Admin Approval'), onTap: () => context.push('/admin')),
           ListTile(title: const Text('9. Notifications'), onTap: () => context.push('/notifications')),
           ListTile(title: const Text('10. Subscription Plans'), onTap: () => context.push('/subscription')),
