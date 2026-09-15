@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../widgets/responsive_layout_wrapper.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../theme/app_theme.dart';
@@ -27,23 +28,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
-            child: Column(
+    Widget content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
+      child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    icon: const Icon(Icons.bug_report),
-                    onPressed: () => context.push('/debug'),
-                    color: AppColors.outlineVariant,
-                  ),
-                ),
                 // Brand Section
                 Container(
                   width: 150,
@@ -170,9 +160,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ],
             ),
-          ),
+          );
+
+    return ResponsiveLayoutWrapper(
+      mobileContent: Center(
+        child: SingleChildScrollView(
+          child: content,
         ),
       ),
+      desktopContent: content,
     );
   }
 

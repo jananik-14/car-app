@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
+import '../widgets/responsive_layout_wrapper.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({super.key});
@@ -16,14 +17,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   @override
   void initState() {
     super.initState();
-    // Simulate pre-filled first 3 digits for visual demo matching the usual flow
-    _controllers[0].text = '4';
-    _controllers[1].text = '8';
-    _controllers[2].text = '1';
     
-    // Focus the 4th box automatically
+    // Focus the 1st box automatically
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNodes[3].requestFocus();
+      _focusNodes[0].requestFocus();
       setState(() {});
     });
 
@@ -45,12 +42,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Widget build(BuildContext context) {
     const lightBlueGrey = Color(0xFFEEF1F7);
     
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
+    Widget content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+      child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Top Bar
@@ -164,32 +158,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   ]
                 ],
               ),
-              const SizedBox(height: 24),
-              
-              // Auto-verify Indicator
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: AppColors.secondaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'AUTO-VERIFYING ON 4TH DIGIT',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.outline,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
               const SizedBox(height: 48),
               
               // Primary Button
@@ -265,8 +233,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               ),
             ],
           ),
-        ),
+        );
+
+    return ResponsiveLayoutWrapper(
+      mobileContent: SingleChildScrollView(
+        child: content,
       ),
+      desktopContent: content,
     );
   }
 

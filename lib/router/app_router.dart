@@ -12,8 +12,7 @@ import '../screens/subscription_plans_screen.dart';
 import '../screens/email_screen.dart';
 import '../screens/debug_menu_screen.dart';
 
-// Dummy role for testing access control
-String currentUserRole = 'admin'; // Change to 'user' to test access denied
+import '../services/auth_service.dart';
 
 class AppRouter {
   static final router = GoRouter(
@@ -47,13 +46,16 @@ class AppRouter {
         builder: (context, state) => const PostVehicleFormScreen(),
       ),
       GoRoute(
-        path: '/confirmation',
-        builder: (context, state) => const ConfirmationScreen(),
+        path: '/confirmation/:type',
+        builder: (context, state) {
+          final type = state.pathParameters['type'] ?? 'listing';
+          return ConfirmationScreen(type: type);
+        },
       ),
       GoRoute(
         path: '/admin',
         redirect: (context, state) {
-          if (currentUserRole != 'admin') {
+          if (AuthService.currentUserRole != 'admin') {
             return '/notifications'; // Skip admin screen for non-admins
           }
           return null;
@@ -69,8 +71,11 @@ class AppRouter {
         builder: (context, state) => const SubscriptionPlansScreen(),
       ),
       GoRoute(
-        path: '/email',
-        builder: (context, state) => const EmailScreen(),
+        path: '/email/:plan',
+        builder: (context, state) {
+          final plan = state.pathParameters['plan'] ?? '';
+          return EmailScreen(planName: plan);
+        },
       ),
       GoRoute(
         path: '/debug',
