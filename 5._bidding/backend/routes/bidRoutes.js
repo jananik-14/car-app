@@ -6,11 +6,12 @@ const {
     getBidStatus,
     getBidConfirmation
 } = require('../controllers/bidController');
+const { protect } = require('../middleware/authMiddleware');
 
 // Routes
-router.post('/place', placeBid);
+router.post('/place', protect, placeBid);
 router.get('/increments', getIncrements);
 router.get('/status/:vehicleId', getBidStatus);
-router.get('/confirmation/:referenceId', getBidConfirmation);
+router.get('/confirmation/:referenceId', protect, getBidConfirmation);
 
 module.exports = router;

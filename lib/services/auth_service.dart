@@ -6,4 +6,8 @@ class AuthService {
    * rather than toggled manually in the UI.
    */
   static String currentUserRole = 'customer';
+  
+  // Added to store JWT token in memory for api_service
+  static String? token;
+  static String? phoneNumber;
 }

@@ -45,8 +45,8 @@ const placeBid = async (req, res) => {
         // Mark any previous "highest" bid for this vehicleId as "outbid"
         await Bid.updateMany({ vehicleId, status: 'highest' }, { status: 'outbid' });
 
-        // Generate a referenceId like "BID" + Date.now() last 8 digits
-        const referenceId = `BID${Date.now().toString().slice(-8)}`;
+        // Generate a referenceId like "W24-" + random 4 digits
+        const referenceId = `W24-${Math.floor(1000 + Math.random() * 9000)}`;
 
         // Save new bid as status "highest"
         const newBid = await Bid.create({
