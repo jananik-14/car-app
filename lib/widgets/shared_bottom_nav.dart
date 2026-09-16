@@ -22,12 +22,15 @@ class SharedBottomNav extends StatelessWidget {
             context.go('/browse');
             break;
           case 1:
-            context.push('/post_vehicle');
+            context.go('/watchlist');
             break;
           case 2:
-            context.go('/notifications');
+            context.go('/post_vehicle');
             break;
           case 3:
+            context.go('/notifications');
+            break;
+          case 4:
             if (AuthService.currentUserRole == 'admin') {
               context.go('/admin');
             } else {
@@ -45,7 +48,12 @@ class SharedBottomNav extends StatelessWidget {
       items: const [
         BottomNavigationBarItem(
           icon: Icon(Icons.directions_car),
-          label: 'Browse',
+          label: 'Live Auctions',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.favorite_border),
+          activeIcon: Icon(Icons.favorite),
+          label: 'Watchlist',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.add_circle_outline),

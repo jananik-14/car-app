@@ -41,20 +41,6 @@ class ConfirmationScreen extends StatelessWidget {
           ],
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share, color: Colors.black),
-            onPressed: () {},
-          ),
-          const Padding(
-            padding: EdgeInsets.only(right: 16.0),
-            child: CircleAvatar(
-              backgroundColor: Color(0xFF001128),
-              radius: 16,
-              child: Icon(Icons.person, color: Colors.white, size: 20),
-            ),
-          ),
-        ],
       ),
       body: Center(
         child: ConstrainedBox(

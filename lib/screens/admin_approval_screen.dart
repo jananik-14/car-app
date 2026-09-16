@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/custom_network_image.dart';
 import '../widgets/shared_bottom_nav.dart';
 
 class AdminApprovalScreen extends StatefulWidget {
@@ -19,7 +20,7 @@ class _AdminApprovalScreenState extends State<AdminApprovalScreen> {
       'seller': 'Rajesh Sharma',
       'rto': 'DL-01',
       'bid': '18.50',
-      'image': 'https://images.unsplash.com/photo-1619682817481-e994891cd1f5?auto=format&fit=crop&w=300&q=80',
+      'image': 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=300&q=80',
     },
     {
       'id': '2',
@@ -27,7 +28,7 @@ class _AdminApprovalScreenState extends State<AdminApprovalScreen> {
       'seller': 'Amit K.',
       'rto': 'HR-26',
       'bid': '12.20',
-      'image': 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=300&q=80',
+      'image': 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=300&q=80',
     },
   ];
 
@@ -123,7 +124,7 @@ class _AdminApprovalScreenState extends State<AdminApprovalScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: const SharedBottomNav(currentIndex: 3), // Profile active
+      bottomNavigationBar: const SharedBottomNav(currentIndex: 4), // Profile active
     );
   }
 
@@ -144,8 +145,7 @@ class _AdminApprovalScreenState extends State<AdminApprovalScreen> {
               // Thumbnail
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  vehicle['image']!,
+                child: CustomNetworkImage(imageUrl: vehicle['image']!,
                   width: 80,
                   height: 80,
                   fit: BoxFit.cover,

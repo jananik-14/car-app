@@ -3,8 +3,15 @@ import '../theme/app_theme.dart';
 import '../widgets/responsive_layout_wrapper.dart';
 import '../widgets/shared_bottom_nav.dart';
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  bool _isCleared = false;
 
   @override
   Widget build(BuildContext context) {
@@ -24,13 +31,13 @@ class NotificationsScreen extends StatelessWidget {
               child: scrollableContent,
             ),
           ),
-          const SharedBottomNav(currentIndex: 2),
+          const SharedBottomNav(currentIndex: 3),
         ],
       ),
       desktopContent: Column(
         children: [
           scrollableContent,
-          const SharedBottomNav(currentIndex: 2),
+          const SharedBottomNav(currentIndex: 3),
         ],
       ),
     );
@@ -103,44 +110,53 @@ class NotificationsScreen extends StatelessWidget {
                   color: AppColors.primary,
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(
-                  color: AppColors.secondaryContainer,
-                  shape: BoxShape.circle,
-                ),
-                child: const Text(
-                  '4',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    height: 1.0,
+              if (!_isCleared) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(
+                    color: AppColors.secondaryContainer,
+                    shape: BoxShape.circle,
                   ),
-                ),
-              ),
-            ],
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: lightBlueGrey,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: const [
-                Icon(Icons.clear_all, size: 16, color: AppColors.primary),
-                SizedBox(width: 4),
-                Text(
-                  'Clear all',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+                  child: const Text(
+                    '4',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      height: 1.0,
+                    ),
                   ),
                 ),
               ],
+            ],
+          ),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isCleared = true;
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: lightBlueGrey,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.clear_all, size: 16, color: AppColors.primary),
+                  SizedBox(width: 4),
+                  Text(
+                    'Clear all',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -149,6 +165,31 @@ class NotificationsScreen extends StatelessWidget {
   }
 
   Widget _buildNotificationList() {
+    if (_isCleared) {
+      return Padding(
+        padding: const EdgeInsets.all(48.0),
+        child: Column(
+          children: const [
+            Icon(Icons.notifications_off_outlined, size: 64, color: AppColors.outline),
+            SizedBox(height: 16),
+            Text(
+              'No notifications',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'You\'re all caught up.',
+              style: TextStyle(color: AppColors.outline),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: Column(

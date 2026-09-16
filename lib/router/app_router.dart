@@ -3,7 +3,9 @@ import '../screens/login_screen.dart';
 import '../screens/otp_verification_screen.dart';
 import '../screens/terms_conditions_screen.dart';
 import '../screens/browse_vehicles_screen.dart';
+import '../screens/watchlist_screen.dart';
 import '../screens/vehicle_detail_screen.dart';
+import '../screens/inspection_report_screen.dart';
 import '../screens/post_vehicle_form_screen.dart';
 import '../screens/confirmation_screen.dart';
 import '../screens/admin_approval_screen.dart';
@@ -35,10 +37,21 @@ class AppRouter {
         builder: (context, state) => const BrowseVehiclesScreen(),
       ),
       GoRoute(
+        path: '/watchlist',
+        builder: (context, state) => const WatchlistScreen(),
+      ),
+      GoRoute(
         path: '/vehicle_detail/:id',
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return VehicleDetailScreen(vehicleId: id);
+        },
+      ),
+      GoRoute(
+        path: '/inspection/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return InspectionReportScreen(vehicleId: id);
         },
       ),
       GoRoute(
