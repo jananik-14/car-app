@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
+import '../providers/watchlist_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 
 class VehicleDetailScreen extends StatefulWidget {
@@ -69,6 +75,47 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
   }
 
+  Map<String, dynamic> get _vehicleData => {
+    'id': widget.vehicleId,
+    'title': '2022 Audi Q5 45 TFSI Quattro',
+    'image': 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80',
+    'year': '2022',
+    'name': 'Audi Q5 45 TFSI Quattro',
+    'currentBid': _formatCurrency(currentBid),
+    'location': 'KA-01',
+    'bidsPlaced': '18',
+  };
+
+  Future<void> _shareVehicle() async {
+    final vehicle = _vehicleData;
+    final String message = "Check out this ${vehicle['year']} ${vehicle['name']} on Wheels2Drive!\n"
+        "💰 Current Bid: ₹${vehicle['currentBid']}\n"
+        "📍 Location: ${vehicle['location']}\n"
+        "⏱ ${vehicle['bidsPlaced']} Bids Placed\n"
+        "🔗 View details: https://wheels2drive.app/vehicle/${vehicle['id']}";
+
+    try {
+      if (kIsWeb) {
+        try {
+          await Share.share(message);
+        } catch (e) {
+          await Clipboard.setData(ClipboardData(text: message));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Vehicle details copied! Paste it in WhatsApp or wherever you want to share.")),
+            );
+          }
+        }
+      } else {
+        await Share.share(message);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error sharing vehicle: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     int difference = offerAmount - currentBid;
@@ -104,7 +151,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.share, color: Colors.black),
-            onPressed: () {},
+            onPressed: _shareVehicle,
           ),
           const Padding(
             padding: EdgeInsets.only(right: 16.0),
@@ -126,8 +173,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 // Image Section
                 Stack(
                   children: [
-                    Image.network(
-                      'https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=800&q=80',
+                    CustomNetworkImage(imageUrl: 
+                      'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80',
                       width: double.infinity,
                       height: 250,
                       fit: BoxFit.cover,
@@ -177,9 +224,26 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                       child: CircleAvatar(
                         backgroundColor: Colors.white,
                         radius: 20,
-                        child: IconButton(
-                          icon: const Icon(Icons.bookmark_border, color: Colors.black, size: 20),
-                          onPressed: () {},
+                        child: Consumer<WatchlistProvider>(
+                          builder: (context, watchlist, child) {
+                            bool isSaved = watchlist.isSaved(widget.vehicleId);
+                            return IconButton(
+                              icon: Icon(
+                                isSaved ? Icons.bookmark : Icons.bookmark_border,
+                                color: isSaved ? orange : Colors.black,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                watchlist.toggleVehicle(_vehicleData);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(isSaved ? 'Removed from Watchlist' : 'Added to Watchlist'),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -284,11 +348,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(child: _buildIncrementButton(25000)),
+                          Expanded(child: _buildIncrementButton(2000)),
                           const SizedBox(width: 8),
-                          Expanded(child: _buildIncrementButton(50000)),
+                          Expanded(child: _buildIncrementButton(5000)),
                           const SizedBox(width: 8),
-                          Expanded(child: _buildIncrementButton(100000)),
+                          Expanded(child: _buildIncrementButton(10000)),
                         ],
                       ),
                       const SizedBox(height: 24),

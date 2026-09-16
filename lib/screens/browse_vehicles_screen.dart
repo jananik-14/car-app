@@ -1,8 +1,14 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/responsive_layout_wrapper.dart';
 import '../widgets/shared_bottom_nav.dart';
+import 'package:provider/provider.dart';
+import '../providers/watchlist_provider.dart';
+import 'filter_sort_screen.dart';
 
 class BrowseVehiclesScreen extends StatefulWidget {
   const BrowseVehiclesScreen({super.key});
@@ -13,6 +19,8 @@ class BrowseVehiclesScreen extends StatefulWidget {
 
 class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
   int _bottomNavIndex = 0;
+  Timer? _refreshTimer;
+  bool _isRefreshing = false;
   
   // Dummy data for vehicles
   final List<Map<String, dynamic>> _vehicles = [
@@ -23,7 +31,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
       'bid': '₹38.5 Lakhs',
       'bids_placed': '14',
       'time_left': '2h 14m',
-      'image': 'https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?auto=format&fit=crop&w=400&q=80',
+      'image': 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=400&q=80',
     },
     {
       'id': '2',
@@ -32,7 +40,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
       'bid': '₹34.2 Lakhs',
       'bids_placed': '8',
       'time_left': '4h 30m',
-      'image': 'https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=400&q=80',
+      'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=400&q=80',
     },
     {
       'id': '3',
@@ -41,9 +49,41 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
       'bid': '₹45.0 Lakhs',
       'bids_placed': '22',
       'time_left': '1h 45m',
-      'image': 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=400&q=80',
+      'image': 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=400&q=80',
     },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _handleRefresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+    setState(() {
+      _isRefreshing = true;
+    });
+    
+    // Simulate network delay
+    await Future.delayed(const Duration(milliseconds: 800));
+    
+    if (mounted) {
+      setState(() {
+        _isRefreshing = false;
+        // Shuffle the list to simulate new data
+        _vehicles.shuffle(Random());
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +93,6 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
       children: [
         _buildTopBar(lightBlueGrey),
         _buildSearchBar(lightBlueGrey),
-        _buildCategoryTabs(),
         _buildSectionHeader(lightBlueGrey),
         ListView.builder(
           shrinkWrap: true,
@@ -62,7 +101,6 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
           itemCount: _vehicles.length,
           itemBuilder: (context, index) => _buildVehicleCard(_vehicles[index], lightBlueGrey),
         ),
-        _buildTrustBanner(),
       ],
     );
 
@@ -111,6 +149,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: const [
               Text(
                 'Wheels2Drive',
@@ -118,14 +157,6 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: AppColors.primary,
-                ),
-              ),
-              Text(
-                'Browse',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.outline,
                 ),
               ),
             ],
@@ -171,58 +202,37 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.5)),
+          GestureDetector(
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) => const FilterSortScreen(),
+              ).then((result) {
+                if (result != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Filters applied!')),
+                  );
+                }
+              });
+            },
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.5)),
+              ),
+              child: const Icon(Icons.tune, color: AppColors.primary, size: 20),
             ),
-            child: const Icon(Icons.tune, color: AppColors.primary, size: 20),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCategoryTabs() {
-    return SizedBox(
-      height: 60,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        children: [
-          _buildCategoryPill('Live Auctions (42)', isActive: true),
-          const SizedBox(width: 12),
-          _buildCategoryPill('Luxury SUVs', isActive: false),
-          const SizedBox(width: 12),
-          _buildCategoryPill('Verified 140-Pt', isActive: false),
-          const SizedBox(width: 12),
-          _buildCategoryPill('Sedans', isActive: false),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryPill(String text, {required bool isActive}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isActive ? AppColors.primary : const Color(0xFFF0F2F6),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        text,
-        style: TextStyle(
-          color: isActive ? Colors.white : AppColors.onSurfaceVariant,
-          fontWeight: FontWeight.bold,
-          fontSize: 13,
-        ),
-      ),
-    );
-  }
 
   Widget _buildSectionHeader(Color lightBlueGrey) {
     return Padding(
@@ -267,17 +277,33 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
             ],
           ),
           Row(
-            children: const [
-              Text(
-                'Auto-refresh',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.outline,
+            children: [
+              if (_isRefreshing)
+                const Padding(
+                  padding: EdgeInsets.only(right: 8.0),
+                  child: SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
+                  ),
+                ),
+              GestureDetector(
+                onTap: _handleRefresh,
+                child: Row(
+                  children: const [
+                    Text(
+                      'Auto-refresh',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.outline,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.refresh, size: 14, color: AppColors.outline),
+                  ],
                 ),
               ),
-              SizedBox(width: 4),
-              Icon(Icons.refresh, size: 14, color: AppColors.outline),
             ],
           ),
         ],
@@ -310,8 +336,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  child: Image.network(
-                    vehicle['image'],
+                  child: CustomNetworkImage(imageUrl: vehicle['image'],
                     height: 180,
                     width: double.infinity,
                     fit: BoxFit.cover,
@@ -371,14 +396,28 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                 Positioned(
                   bottom: 12,
                   right: 12,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.favorite_border, color: AppColors.primary, size: 18),
+                  child: Consumer<WatchlistProvider>(
+                    builder: (context, watchlist, child) {
+                      bool isSaved = watchlist.isSaved(vehicle['id']);
+                      return GestureDetector(
+                        onTap: () {
+                          watchlist.toggleVehicle(vehicle);
+                        },
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            isSaved ? Icons.favorite : Icons.favorite_border,
+                            color: isSaved ? Colors.red : AppColors.primary,
+                            size: 18,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -473,7 +512,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                       Expanded(
                         flex: 1,
                         child: OutlinedButton(
-                          onPressed: () {},
+                          onPressed: () => context.push('/inspection/${vehicle['id']}'),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppColors.primary, width: 1.5),
                             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
@@ -543,45 +582,6 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
     );
   }
 
-  Widget _buildTrustBanner() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.primaryContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.verified_user, color: Colors.white, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '100% Escrow & RC Transfer Guaranteed',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Instant documentation with 5-day easy returns',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildBottomNav() {
     return const SharedBottomNav(currentIndex: 0);

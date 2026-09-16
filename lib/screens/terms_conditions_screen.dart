@@ -196,7 +196,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Only KYC-verified dealers can access live auctions. Accounts are non-transferable and subject to quarterly audits.',
+                            'Only KYC-verified clients can access live auctions. Accounts are non-transferable and subject to quarterly audits.',
                             style: TextStyle(
                               color: AppColors.outline,
                               fontSize: 13,

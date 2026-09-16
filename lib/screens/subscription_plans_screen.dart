@@ -51,13 +51,13 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
               child: scrollableContent,
             ),
           ),
-          const SharedBottomNav(currentIndex: 3),
+          const SharedBottomNav(currentIndex: 4),
         ],
       ),
       desktopContent: Column(
         children: [
           scrollableContent,
-          const SharedBottomNav(currentIndex: 3),
+          const SharedBottomNav(currentIndex: 4),
         ],
       ),
     );
@@ -153,30 +153,6 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                     ),
                   ),
                 ],
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.5)),
-                  color: AppColors.surfaceContainerLowest,
-                ),
-                child: const Icon(Icons.search, color: AppColors.primary, size: 20),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.primaryContainer,
-                ),
-                child: const Icon(Icons.person, color: Colors.white, size: 20),
               ),
             ],
           ),

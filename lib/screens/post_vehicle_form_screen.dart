@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
-
+import '../widgets/shared_bottom_nav.dart';
 class PostVehicleFormScreen extends StatefulWidget {
   const PostVehicleFormScreen({super.key});
 
@@ -23,14 +25,25 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   // Step 3 State
   final TextEditingController _kmController = TextEditingController(text: '42,500');
   String _selectedOwner = '1st Owner';
-  bool _isAccidentFree = true;
-  bool _hasServiceHistory = true;
-  bool _hasComprehensiveInsurance = true;
+  String _selectedInsuranceType = 'Comprehensive (Zero Dep)';
+  DateTime _insuranceExpiryDate = DateTime(2025, 11, 24);
+
+  String _formatDate(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]} ${date.year}';
+  }
 
   // Step 5 State
   final TextEditingController _priceController = TextEditingController(text: '5,80,000');
   bool _enableReservePrice = true;
   String _selectedDuration = '48 Hours';
+
+  // Step 4 State (Uploads)
+  final ImagePicker _picker = ImagePicker();
+  String? _leftRightPath;
+  String? _interiorDashPath;
+  String? _engineTyresPath;
+  String? _rcInsurancePath;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +53,10 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         titleSpacing: 0,
-        leading: Icon(Icons.drive_eta, color: navyBlue), // Placeholder logo
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+        ), // Logo
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -48,17 +64,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             const Text('Post Sell', style: TextStyle(color: Colors.grey, fontSize: 12)),
           ],
         ),
-        actions: [
-          IconButton(icon: const Icon(Icons.search, color: Colors.grey), onPressed: () {}),
-          const Padding(
-            padding: EdgeInsets.only(right: 16.0),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.grey,
-              child: Icon(Icons.person, color: Colors.white, size: 20),
-            ),
-          ),
-        ],
+        actions: [],
       ),
       body: Center(
         child: ConstrainedBox(
@@ -82,7 +88,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                           ],
                         ),
                         Text(
-                          _currentStep == 1 ? 'Vehicle Category' : _currentStep == 2 ? 'Vehicle Identity' : _currentStep == 3 ? 'Condition & Usage' : _currentStep == 4 ? 'Upload Photos' : 'Pricing & Auction',
+                          _currentStep == 1 ? 'Vehicle Category' : _currentStep == 2 ? 'Vehicle Identity' : _currentStep == 3 ? 'Vehicle Health & Records' : _currentStep == 4 ? 'Upload Photos' : 'Pricing & Auction',
                           style: TextStyle(
                             color: _currentStep == 5 ? orange : Colors.grey, 
                             fontSize: 12, 
@@ -123,37 +129,8 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: orange,
-        unselectedItemColor: Colors.grey,
-        currentIndex: 1, // Post/Sell is active
-        onTap: (index) {
-          if (index == 0) {
-            context.go('/browse');
-          } else if (index == 2) {
-            context.go('/notifications');
-          } else if (index == 3) {
-            if (AuthService.currentUserRole == 'admin') {
-              context.go('/admin');
-            } else {
-              context.go('/subscription');
-            }
-          }
-        },
-        items: [
-          const BottomNavigationBarItem(icon: Icon(Icons.directions_car_outlined), label: 'Browse'),
-          BottomNavigationBarItem(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: orange, shape: BoxShape.circle),
-              child: const Icon(Icons.add, color: Colors.white, size: 24),
-            ),
-            label: 'Post/Sell',
-          ),
-          const BottomNavigationBarItem(icon: Icon(Icons.notifications_none), label: 'Alerts'),
-          const BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
-        ],
+      bottomNavigationBar: const SharedBottomNav(
+        currentIndex: 2, // Post/Sell is active
       ),
     );
   }
@@ -619,7 +596,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Tell us about your vehicle\nusage & condition',
+          'Vehicle Health & Records',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
@@ -629,12 +606,12 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 12),
         const Text(
-          'Accurate kilometer and ownership details ensure higher winning bids and rapid buyer verification.',
+          'Provide accurate mileage and active insurance details to fast-track buyer verification and maximize offer rates.',
           style: TextStyle(color: Colors.grey, fontSize: 16, height: 1.4),
         ),
         const SizedBox(height: 32),
         
-        // Vehicle Summary Card
+        // Vehicle Info Card
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -681,11 +658,11 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 32),
         
-        // Kilometers Driven Section
+        // Kilometers Driven
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Kilometers Driven (KM)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: navyBlue)),
+            Text('Total Kilometers Driven', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: navyBlue)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(color: orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
@@ -730,18 +707,18 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Average for 2021 model: ~35,000-45,000 KM', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const Text('Avg for 2021 models: ~35k-45k km', style: TextStyle(color: Colors.grey, fontSize: 12)),
             Text('Standard Range', style: TextStyle(color: Colors.green[700], fontSize: 12, fontWeight: FontWeight.bold)),
           ],
         ),
         const SizedBox(height: 32),
         
-        // Number of Owners Section
+        // Number of Owners
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Number of Owners', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: navyBlue)),
-            const Text('As per RC Smart Card', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            Text('Number of Previous Owners', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: navyBlue)),
+            const Text('RC Record', style: TextStyle(color: Colors.grey, fontSize: 12)),
           ],
         ),
         const SizedBox(height: 16),
@@ -761,58 +738,164 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 32),
         
-        // Vehicle Health & Records Section
+        // Insurance Details Section
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Vehicle Health & Records', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: navyBlue)),
-            Text('Boosts Value +12%', style: TextStyle(color: orange, fontSize: 12, fontWeight: FontWeight.bold)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Insurance Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: navyBlue)),
+                const SizedBox(height: 4),
+                const Text('Protects transfer valuation', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+              child: const Text('HSRP', style: TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
         const SizedBox(height: 16),
-        _buildToggleRow(
-          'Accident Free',
-          'Zero frame, chassis, or structural flood damage',
-          Icons.health_and_safety_outlined,
-          _isAccidentFree,
-          (val) => setState(() => _isAccidentFree = val),
+        Text('Insurance Coverage Type', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey[300]!),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: _selectedInsuranceType,
+              icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: navyBlue),
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _selectedInsuranceType = newValue;
+                  });
+                }
+              },
+              items: <String>[
+                'Comprehensive (Zero Dep)',
+                'Comprehensive (Standard)',
+                'Third-Party Only',
+                'Third-Party + Own Damage',
+              ].map<DropdownMenuItem<String>>((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+            ),
+          ),
         ),
-        const Divider(height: 32),
-        _buildToggleRow(
-          'Full Service History Available',
-          'Authorized OEM service logbook stamped',
-          Icons.menu_book_outlined,
-          _hasServiceHistory,
-          (val) => setState(() => _hasServiceHistory = val),
+        const SizedBox(height: 16),
+        Text('Insurance Till (Expiry Date)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () async {
+            print('Date field tapped');
+            final DateTime? picked = await showDatePicker(
+              context: context,
+              initialDate: _insuranceExpiryDate,
+              firstDate: DateTime(2000),
+              lastDate: DateTime(2030),
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: ColorScheme.light(
+                      primary: orange,
+                      onPrimary: Colors.white,
+                      onSurface: navyBlue,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (picked != null && picked != _insuranceExpiryDate) {
+              setState(() {
+                _insuranceExpiryDate = picked;
+              });
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(_formatDate(_insuranceExpiryDate), style: TextStyle(fontSize: 14, color: navyBlue)),
+                const Icon(Icons.calendar_today_outlined, color: Colors.grey, size: 20),
+              ],
+            ),
+          ),
         ),
-        const Divider(height: 32),
-        _buildToggleRow(
-          'Comprehensive Insurance',
-          'Zero-depreciation policy linked',
-          Icons.shield_outlined,
-          _hasComprehensiveInsurance,
-          (val) => setState(() => _hasComprehensiveInsurance = val),
-          badge: 'Active',
-          badgeText: 'Nov 2026 Expiry date',
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green[700], size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Validity: Active & Verified', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[800], fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Text('Synced with Vahan Government Database', style: TextStyle(color: Colors.green[700], fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 32),
-        
-        // Info Banner
+
+        // Odometer Photo Tip
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.grey[100],
+            color: navyBlue,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.verified_user_outlined, color: Colors.green[700], size: 20),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Wheels2Drive verifies vehicle data via MoRTH Parivahan to ensure tamper-proof buyer confidence.',
-                  style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
+              Icon(Icons.speed_outlined, color: orange, size: 28),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text('ODOMETER PHOTO TIP', style: TextStyle(color: orange, fontWeight: FontWeight.bold, fontSize: 12)),
+                        const SizedBox(width: 4),
+                        Icon(Icons.star, color: orange, size: 12),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Clear meter reading proof in Step 4 unlocks instant badge for 3x buyer trust.',
+                      style: TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -820,7 +903,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 48),
         
-        // Next Step Button
+        // Button
         SizedBox(
           width: double.infinity,
           height: 56,
@@ -859,7 +942,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
               });
             },
             child: Text(
-              '← Back to Step 2 (Registration)',
+              '← Back to Step 2',
               style: TextStyle(
                 color: navyBlue,
                 fontWeight: FontWeight.w600,
@@ -900,47 +983,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
     );
   }
 
-  Widget _buildToggleRow(String title, String subtitle, IconData icon, bool value, ValueChanged<bool> onChanged, {String? badge, String? badgeText}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: Colors.grey, size: 24),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: navyBlue, fontSize: 14)),
-              const SizedBox(height: 4),
-              Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              if (badge != null && badgeText != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(4)),
-                      child: Text(badge, style: TextStyle(color: Colors.green[700], fontSize: 10, fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(badgeText, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeColor: Colors.white,
-          activeTrackColor: orange,
-          inactiveThumbColor: Colors.grey[400],
-          inactiveTrackColor: Colors.grey[200],
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildStep4() {
     return Column(
@@ -997,10 +1040,10 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           crossAxisSpacing: 16,
           childAspectRatio: 1.1,
           children: [
-            _buildUploadSlot('Left & Right', Icons.camera_alt_outlined, false),
-            _buildUploadSlot('Interior & Dash', Icons.dashboard_outlined, false),
-            _buildUploadSlot('Engine & Tyres', Icons.build_outlined, false),
-            _buildUploadSlot('RC & Insurance', Icons.description_outlined, true),
+            _buildUploadSlot('Left & Right', Icons.camera_alt_outlined, false, _leftRightPath, (path) => setState(() => _leftRightPath = path)),
+            _buildUploadSlot('Interior & Dash', Icons.dashboard_outlined, false, _interiorDashPath, (path) => setState(() => _interiorDashPath = path)),
+            _buildUploadSlot('Engine & Tyres', Icons.build_outlined, false, _engineTyresPath, (path) => setState(() => _engineTyresPath = path)),
+            _buildUploadSlot('RC & Insurance', Icons.description_outlined, true, _rcInsurancePath, (path) => setState(() => _rcInsurancePath = path)),
           ],
         ),
         const SizedBox(height: 32),
@@ -1144,13 +1187,97 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
     );
   }
 
-  Widget _buildUploadSlot(String label, IconData icon, bool isOptional) {
-    return InkWell(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Photo upload coming soon')),
+  Future<void> _pickImage(Function(String) onImagePicked) async {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choose from Files'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+                  if (image != null) {
+                    onImagePicked(image.path);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera),
+                title: const Text('Take Photo'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
+                  if (photo != null) {
+                    onImagePicked(photo.path);
+                  }
+                },
+              ),
+            ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildUploadSlot(String label, IconData icon, bool isOptional, String? imagePath, Function(String) onImagePicked) {
+    if (imagePath != null) {
+      return InkWell(
+        onTap: () => _pickImage(onImagePicked),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(
+                      File(imagePath),
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.check_circle, color: orange, size: 16),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: navyBlue, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text('Uploaded', style: TextStyle(color: orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: () => _pickImage(onImagePicked),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -1437,12 +1564,14 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         Center(
           child: InkWell(
             onTap: () {
-              // Save draft
+              setState(() {
+                _currentStep = 4; // Go back to step 4
+              });
             },
-            child: Text(
-              'Save as Draft & Exit',
+            child: const Text(
+              '← Back to Step 4',
               style: TextStyle(
-                color: navyBlue,
+                color: Colors.grey,
                 fontWeight: FontWeight.w600,
               ),
             ),
