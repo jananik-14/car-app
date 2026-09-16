@@ -26,6 +26,9 @@ class ApiService {
   static const String _authBaseUrl = 'http://localhost:5000/api/auth';
   static const String _vehicleBaseUrl = 'http://localhost:5001/api/vehicle';
   static const String _bidBaseUrl = 'http://localhost:5002/api/bid';
+  static const String _subscriptionBaseUrl = 'http://localhost:5003/api/subscription';
+  static const String _notificationBaseUrl = 'http://localhost:5004/api/notification';
+  static const String _watchlistBaseUrl = 'http://localhost:5005/api/watchlist';
 
   // 1. Auth: OTP Login
   Future<bool> sendOtp(String mobileNumber) async {
@@ -140,15 +143,98 @@ class ApiService {
     }
   }
 
-  // 7. Notifications (Not yet implemented in backend)
+  // 7. Notifications
   Future<List<dynamic>> getNotifications() async {
-    await Future.delayed(const Duration(seconds: 1));
-    return [];
+    try {
+      if (AuthService.phoneNumber == null) return [];
+      final response = await _dio.get('$_notificationBaseUrl/${AuthService.phoneNumber}');
+      if (response.data['success'] == true) {
+        return response.data['data'];
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching notifications: $e');
+      return [];
+    }
   }
 
-  // 8. Subscriptions (Not yet implemented in backend)
+  Future<bool> markNotificationAsRead(String id) async {
+    try {
+      final response = await _dio.patch('$_notificationBaseUrl/$id/read');
+      return response.data['success'] == true;
+    } catch (e) {
+      print('Error marking notification as read: $e');
+      return false;
+    }
+  }
+
+  // 8. Subscriptions
   Future<bool> subscribeToPlan(String planId) async {
-    await Future.delayed(const Duration(seconds: 1));
-    return true;
+    try {
+      final response = await _dio.post('$_subscriptionBaseUrl/subscribe', data: {
+        'phoneNumber': AuthService.phoneNumber ?? 'Unknown',
+        'planId': planId,
+        'durationInDays': 30, // Default duration
+      });
+      return response.data['success'] == true;
+    } catch (e) {
+      print('Error subscribing to plan: $e');
+      return false;
+    }
+  }
+  
+  Future<Map<String, dynamic>?> getSubscriptionStatus() async {
+    try {
+      if (AuthService.phoneNumber == null) return null;
+      final response = await _dio.get('$_subscriptionBaseUrl/status/${AuthService.phoneNumber}');
+      if (response.data['success'] == true) {
+        return response.data['data']; // Will be null if no active sub, which is fine
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching subscription status: $e');
+      return null;
+    }
+  }
+
+  // 9. Watchlist
+  Future<List<dynamic>> getWatchlist() async {
+    try {
+      if (AuthService.phoneNumber == null) return [];
+      final response = await _dio.get('$_watchlistBaseUrl/${AuthService.phoneNumber}');
+      if (response.data['success'] == true) {
+        return response.data['data'];
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching watchlist: $e');
+      return [];
+    }
+  }
+
+  Future<bool> addToWatchlist(String vehicleId) async {
+    try {
+      final response = await _dio.post('$_watchlistBaseUrl/add', data: {
+        'phoneNumber': AuthService.phoneNumber ?? 'Unknown',
+        'vehicleId': vehicleId,
+      });
+      return response.data['success'] == true;
+    } catch (e) {
+      print('Error adding to watchlist: $e');
+      return false;
+    }
+  }
+
+  Future<bool> removeFromWatchlist(String vehicleId) async {
+    try {
+      final response = await _dio.delete('$_watchlistBaseUrl/remove', data: {
+        'phoneNumber': AuthService.phoneNumber ?? 'Unknown',
+        'vehicleId': vehicleId,
+      });
+      return response.data['success'] == true;
+    } catch (e) {
+      print('Error removing from watchlist: $e');
+      return false;
+    }
   }
 }
