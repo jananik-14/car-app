@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import 'subscription_plans_screen.dart'; // For global state
 import '../widgets/responsive_layout_wrapper.dart';
+import '../services/api_service.dart';
 
 class EmailScreen extends StatefulWidget {
   final String planName;
@@ -17,7 +18,7 @@ class _EmailScreenState extends State<EmailScreen> {
   final TextEditingController _emailController = TextEditingController();
   String? _errorMessage;
 
-  void _saveEmail() {
+  void _saveEmail() async {
     final email = _emailController.text.trim();
     
     // Basic email validation
@@ -31,6 +32,16 @@ class _EmailScreenState extends State<EmailScreen> {
     setState(() {
       _errorMessage = null;
     });
+
+    // Call API to subscribe
+    bool success = await ApiService().subscribeToPlan(widget.planName);
+
+    if (!success) {
+      setState(() {
+        _errorMessage = 'Failed to activate subscription. Please try again.';
+      });
+      return;
+    }
 
     // Save/update global state
     currentSubscriptionPlan = widget.planName;

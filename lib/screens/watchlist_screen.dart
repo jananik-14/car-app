@@ -19,6 +19,14 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
   int _selectedTabIndex = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<WatchlistProvider>(context, listen: false).loadWatchlist();
+    });
+  }
+
   final List<Map<String, dynamic>> _upcomingVehicles = [
     {
       'id': 'up1',
