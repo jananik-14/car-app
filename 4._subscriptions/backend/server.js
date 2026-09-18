@@ -13,7 +13,7 @@ app.use('/api/subscription', subscriptionRoutes);
 const PORT = process.env.PORT || 5003;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wheels2drive_subscriptions';
 
-mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(MONGO_URI)
     .then(() => {
         console.log('Connected to MongoDB - Subscriptions');
         app.listen(PORT, () => {
