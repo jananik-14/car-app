@@ -22,7 +22,6 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildTopBar(),
-        _buildAdminToggle(),
         _buildTrustBadge(),
         _buildHeading(),
         Padding(
@@ -63,49 +62,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     );
   }
 
-  Widget _buildAdminToggle() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.amber.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.amber),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Admin Mode (Testing)',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '⚠️ DEV MODE ONLY - Remove before production',
-                    style: TextStyle(fontSize: 10, color: Colors.deepOrange.shade700, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-            Switch(
-              value: AuthService.currentUserRole == 'admin',
-              onChanged: (val) {
-                setState(() {
-                  AuthService.currentUserRole = val ? 'admin' : 'customer';
-                });
-              },
-              activeColor: Colors.amber,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildTopBar() {
     return Padding(
@@ -156,10 +113,96 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
               ),
             ],
           ),
+          Theme(
+            data: Theme.of(context).copyWith(
+              splashColor: const Color(0xFFFB7800).withValues(alpha: 0.1),
+              highlightColor: const Color(0xFFFB7800).withValues(alpha: 0.1),
+              hoverColor: const Color(0xFFFB7800).withValues(alpha: 0.1),
+            ),
+            child: PopupMenuButton<String>(
+              offset: const Offset(0, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              color: Colors.white,
+              elevation: 4,
+              onSelected: (value) {
+                if (value == 'activity') {
+                  context.push('/my_activity');
+                } else if (value == 'edit_profile') {
+                  context.push('/profile_edit');
+                } else if (value == 'help') {
+                  context.push('/help_support');
+                } else if (value == 'logout') {
+                  _showLogoutDialog(context);
+                }
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                PopupMenuItem<String>(
+                  value: 'activity',
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.history, color: AppColors.primary),
+                      SizedBox(width: 12),
+                      Text('My Activity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.primary)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'edit_profile',
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.person_outline, color: AppColors.primary),
+                      SizedBox(width: 12),
+                      Text('Edit My Profile', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.primary)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'help',
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.help_outline, color: AppColors.primary),
+                      SizedBox(width: 12),
+                      Text('Help & Support', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.primary)),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(height: 1),
+                PopupMenuItem<String>(
+                  value: 'logout',
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.logout, color: Color(0xFFFB7800)),
+                      SizedBox(width: 12),
+                      Text('Logout', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFFFB7800))),
+                    ],
+                  ),
+                ),
+              ],
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
+
+
 
   Widget _buildTrustBadge() {
     return Padding(
@@ -665,5 +708,33 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         // Will rebuild and show correct disabled state based on currentSubscriptionPlan
       });
     }
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Logout'),
+          content: const Text('Are you sure you want to logout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                setState(() {
+                  AuthService.currentUserRole = 'customer';
+                });
+                context.go('/login');
+              },
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

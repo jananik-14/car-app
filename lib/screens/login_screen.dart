@@ -14,10 +14,22 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _mobileController = TextEditingController();
+  bool _showError = false;
+
+  bool get isPhoneValid => _mobileController.text.trim().length == 10 && RegExp(r'^[0-9]{10}$').hasMatch(_mobileController.text.trim());
 
   void _getOtp() {
+    if (!isPhoneValid) {
+      setState(() {
+        _showError = true;
+      });
+      return;
+    }
+    setState(() {
+      _showError = false;
+    });
     // Navigate to OTP screen
-    context.push('/otp');
+    context.push('/otp', extra: _mobileController.text);
   }
 
   @override
@@ -107,7 +119,25 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(width: 12),
                         ],
                       ),
+                      onChanged: (value) {
+                        setState(() {
+                          if (_showError) {
+                            _showError = false;
+                          }
+                        }); // Rebuild to evaluate isPhoneValid
+                      },
                     ),
+                    if (_showError)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0, left: 4.0),
+                        child: Text(
+                          'Please enter a valid 10-digit mobile number',
+                          style: TextStyle(
+                            color: Colors.red.shade700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 24),
                     PrimaryButton(
                       text: 'Get OTP',

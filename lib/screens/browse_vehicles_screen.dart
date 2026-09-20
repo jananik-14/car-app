@@ -21,6 +21,8 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
   int _bottomNavIndex = 0;
   Timer? _refreshTimer;
   bool _isRefreshing = false;
+  String searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
   
   // Dummy data for vehicles
   final List<Map<String, dynamic>> _vehicles = [
@@ -53,6 +55,16 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
     },
   ];
 
+  List<Map<String, dynamic>> get filteredVehicles {
+    if (searchQuery.isEmpty) return _vehicles;
+    final query = searchQuery.toLowerCase();
+    return _vehicles.where((v) {
+      final title = (v['title']?.toString() ?? '').toLowerCase();
+      final specs = (v['specs']?.toString() ?? '').toLowerCase();
+      return title.contains(query) || specs.contains(query);
+    }).toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +76,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -94,12 +107,45 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
         _buildTopBar(lightBlueGrey),
         _buildSearchBar(lightBlueGrey),
         _buildSectionHeader(lightBlueGrey),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          itemCount: _vehicles.length,
-          itemBuilder: (context, index) => _buildVehicleCard(_vehicles[index], lightBlueGrey),
+        Builder(
+          builder: (context) {
+            final currentVehicles = filteredVehicles;
+            if (currentVehicles.isEmpty && searchQuery.isNotEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 64.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.search_off, size: 60, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    Text(
+                      "No vehicles found for '$searchQuery'",
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Try a different car, model, or city",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              itemCount: currentVehicles.length,
+              itemBuilder: (context, index) => _buildVehicleCard(currentVehicles[index], lightBlueGrey),
+            );
+          },
         ),
       ],
     );
@@ -186,6 +232,12 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
+                      controller: _searchController,
+                      onChanged: (value) {
+                        setState(() {
+                          searchQuery = value;
+                        });
+                      },
                       decoration: InputDecoration(
                         hintText: 'Search car, model, city...',
                         hintStyle: const TextStyle(
@@ -193,7 +245,18 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                           fontSize: 14,
                         ),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.only(bottom: 12),
+                        contentPadding: const EdgeInsets.only(bottom: 12, top: 12),
+                        suffixIcon: searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    searchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
                       ),
                     ),
                   ),

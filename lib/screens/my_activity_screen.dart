@@ -1,0 +1,455 @@
+import 'package:flutter/material.dart';
+import '../widgets/custom_network_image.dart';
+import 'package:go_router/go_router.dart';
+
+class MyActivityScreen extends StatefulWidget {
+  const MyActivityScreen({super.key});
+
+  @override
+  State<MyActivityScreen> createState() => _MyActivityScreenState();
+}
+
+class _MyActivityScreenState extends State<MyActivityScreen> {
+  final Color navyBlue = const Color(0xFF001128);
+  final Color orange = const Color(0xFFFB7800);
+
+  int _selectedTabIndex = 0;
+
+  final List<Map<String, dynamic>> _myBids = [
+    {
+      'id': 'b1',
+      'title': '2021 Hyundai Creta SX',
+      'image': 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80',
+      'user_bid': '14,20,000',
+      'highest_bid': '14,50,000',
+      'status': 'Outbid',
+      'end_time': '02h 15m'
+    },
+    {
+      'id': 'b2',
+      'title': '2019 Maruti Suzuki Swift ZXi',
+      'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=400&q=80',
+      'user_bid': '5,40,000',
+      'highest_bid': '5,40,000',
+      'status': 'Winning',
+      'end_time': '00h 45m'
+    },
+    {
+      'id': 'b3',
+      'title': '2018 Honda City V MT',
+      'image': 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=400&q=80',
+      'user_bid': '7,10,000',
+      'highest_bid': '7,50,000',
+      'status': 'Lost',
+      'end_time': 'Ended'
+    },
+  ];
+
+  final List<Map<String, dynamic>> _myListings = [
+    {
+      'id': 'l1',
+      'title': '2020 Kia Seltos GTX+',
+      'image': 'https://images.unsplash.com/photo-1519641471654-76ce0107ad1b',
+      'highest_bid': '15,00,000',
+      'status': 'Live',
+    },
+    {
+      'id': 'l2',
+      'title': '2022 Mahindra Thar LX',
+      'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf',
+      'highest_bid': '-',
+      'status': 'Pending Approval',
+    }
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      appBar: _buildAppBar(),
+      body: Column(
+        children: [
+          _buildTabRow(),
+          Expanded(
+            child: _buildListContent(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      leading: IconButton(
+        icon: Icon(Icons.arrow_back, color: navyBlue),
+        onPressed: () => context.pop(),
+      ),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset('assets/images/logo.png', height: 24, fit: BoxFit.contain),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Wheels2Drive',
+                style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const Text(
+                'My Activity',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabRow() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          _buildTab('My Bids', _myBids.length.toString(), 0),
+          const SizedBox(width: 12),
+          _buildTab('My Listings', _myListings.length.toString(), 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTab(String title, String count, int tabIndex) {
+    bool isSelected = _selectedTabIndex == tabIndex;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTabIndex = tabIndex;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? navyBlue : Colors.transparent,
+          border: Border.all(color: isSelected ? navyBlue : Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey.shade700,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? orange : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                count,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey.shade600,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListContent() {
+    List<Widget> items = [];
+    if (_selectedTabIndex == 0) {
+      for (var bid in _myBids) {
+        items.add(Padding(
+          padding: const EdgeInsets.only(bottom: 16.0),
+          child: _buildBidCard(bid),
+        ));
+      }
+    } else {
+      for (var listing in _myListings) {
+        items.add(Padding(
+          padding: const EdgeInsets.only(bottom: 16.0),
+          child: _buildListingCard(listing),
+        ));
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: items,
+    );
+  }
+
+  Widget _buildBidCard(Map<String, dynamic> bid) {
+    Color statusColor;
+    switch (bid['status']) {
+      case 'Winning':
+      case 'Won':
+        statusColor = Colors.green;
+        break;
+      case 'Outbid':
+      case 'Lost':
+        statusColor = Colors.red;
+        break;
+      default:
+        statusColor = Colors.grey;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: CustomNetworkImage(
+                  imageUrl: bid['image'],
+                  height: 160,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                top: 12,
+                left: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    bid['status'].toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 12,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(16)),
+                  child: Text(
+                    bid['end_time'] == 'Ended' ? 'Ended' : 'Ends in ${bid['end_time']}',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  bid['title'],
+                  style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Your Bid', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text('₹${bid['user_bid']}', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('Highest Bid', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text('₹${bid['highest_bid']}', style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListingCard(Map<String, dynamic> listing) {
+    Color statusColor;
+    switch (listing['status']) {
+      case 'Live':
+        statusColor = Colors.green;
+        break;
+      case 'Pending Approval':
+        statusColor = orange;
+        break;
+      case 'Sold':
+        statusColor = navyBlue;
+        break;
+      case 'Rejected':
+        statusColor = Colors.red;
+        break;
+      default:
+        statusColor = Colors.grey;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: CustomNetworkImage(
+                  imageUrl: listing['image'],
+                  height: 160,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                top: 12,
+                left: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    listing['status'].toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  listing['title'],
+                  style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Current Highest Bid', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text(
+                          listing['highest_bid'] == '-' ? '-' : '₹${listing['highest_bid']}',
+                          style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          context.push('/vehicle_detail/${listing['id']}', extra: {
+                            'vehicleData': {
+                              'id': listing['id'],
+                              'title': listing['title'],
+                              'image': listing['image'],
+                              'year': listing['title'].split(' ')[0],
+                              'name': listing['title'].substring(listing['title'].indexOf(' ') + 1),
+                              'currentBid': listing['highest_bid'] == '-' ? '0' : listing['highest_bid'],
+                              'location': 'Local',
+                              'bidsPlaced': listing['highest_bid'] == '-' ? '0' : '1',
+                              'specs': '${listing['title'].split(' ')[0]} • Petrol',
+                              'bid': listing['highest_bid'],
+                              'bids_placed': listing['highest_bid'] == '-' ? '0' : '1',
+                              'time_left': 'N/A'
+                            },
+                            'isOwner': true,
+                            'isPending': listing['status'] == 'Pending Approval',
+                          });
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: navyBlue,
+                          side: BorderSide(color: navyBlue),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text('View Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      ),
+                    ),
+                    if (listing['status'] == 'Pending Approval' || listing['status'] == 'Rejected') ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            final result = await context.push('/post_vehicle', extra: {
+                              'isEditMode': true,
+                              'initialData': listing,
+                            });
+                            if (result == true) {
+                              setState(() {
+                                listing['title'] = listing['title'] + ' (Updated)';
+                              });
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: navyBlue,
+                            side: BorderSide(color: navyBlue),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text('Edit Listing', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

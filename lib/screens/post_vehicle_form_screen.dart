@@ -1,11 +1,14 @@
-import 'dart:io';
+
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import '../widgets/shared_bottom_nav.dart';
 class PostVehicleFormScreen extends StatefulWidget {
-  const PostVehicleFormScreen({super.key});
+  final bool isEditMode;
+  final Map<String, dynamic>? initialData;
+  const PostVehicleFormScreen({super.key, this.isEditMode = false, this.initialData});
 
   @override
   State<PostVehicleFormScreen> createState() => _PostVehicleFormScreenState();
@@ -40,10 +43,12 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
 
   // Step 4 State (Uploads)
   final ImagePicker _picker = ImagePicker();
-  String? _leftRightPath;
-  String? _interiorDashPath;
-  String? _engineTyresPath;
-  String? _rcInsurancePath;
+  List<XFile> frontViewImages = [];
+  List<XFile> rearViewImages = [];
+  List<XFile> leftRightImages = [];
+  List<XFile> interiorDashImages = [];
+  List<XFile> engineTyresImages = [];
+  List<XFile> rcInsuranceImages = [];
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +66,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Wheels2Drive', style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16)),
-            const Text('Post Sell', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            Text(widget.isEditMode ? 'Edit Listing' : 'Post Sell', style: const TextStyle(color: Colors.grey, fontSize: 12)),
           ],
         ),
         actions: [],
@@ -985,6 +990,165 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
 
 
 
+  Future<void> _pickImages(List<XFile> currentList) async {
+    final List<XFile> pickedImages = await _picker.pickMultiImage();
+    if (pickedImages.isNotEmpty) {
+      setState(() {
+        currentList.addAll(pickedImages);
+      });
+    }
+  }
+
+  Widget _buildImageCategoryBox(String label, IconData icon, List<XFile> images) {
+    if (images.isNotEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(icon, size: 16, color: navyBlue),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: TextStyle(fontWeight: FontWeight.bold, color: navyBlue, fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text('${images.length} photos', style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text('Uploaded', style: TextStyle(color: orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  ...images.asMap().entries.map((entry) {
+                    int index = entry.key;
+                    XFile image = entry.value;
+                    return Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: FutureBuilder<Uint8List>(
+                              future: image.readAsBytes(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState == ConnectionState.done && snapshot.hasData) {
+                                  return Image.memory(
+                                    snapshot.data!,
+                                    width: 60,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                  );
+                                }
+                                return const SizedBox(
+                                  width: 60,
+                                  height: 60,
+                                  child: Center(
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  images.removeAt(index);
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.close, color: Colors.white, size: 14),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  GestureDetector(
+                    onTap: () => _pickImages(images),
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: navyBlue, style: BorderStyle.solid),
+                      ),
+                      child: Center(
+                        child: Icon(Icons.add, color: navyBlue),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: () => _pickImages(images),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!, style: BorderStyle.solid),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.grey, size: 32),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: TextStyle(fontWeight: FontWeight.bold, color: navyBlue, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            const Text('Tap to Upload', style: TextStyle(color: Colors.grey, fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildStep4() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1011,39 +1175,20 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 32),
         
-        // Uploaded Photos Row
-        Row(
-          children: [
-            Expanded(
-              child: _buildUploadedPhotoCard(
-                'Front View', 
-                'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=400'
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildUploadedPhotoCard(
-                'Rear View', 
-                'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&q=80&w=400'
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        
-        // Upload Slots Grid
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 16,
           crossAxisSpacing: 16,
-          childAspectRatio: 1.1,
+          childAspectRatio: 1.0,
           children: [
-            _buildUploadSlot('Left & Right', Icons.camera_alt_outlined, false, _leftRightPath, (path) => setState(() => _leftRightPath = path)),
-            _buildUploadSlot('Interior & Dash', Icons.dashboard_outlined, false, _interiorDashPath, (path) => setState(() => _interiorDashPath = path)),
-            _buildUploadSlot('Engine & Tyres', Icons.build_outlined, false, _engineTyresPath, (path) => setState(() => _engineTyresPath = path)),
-            _buildUploadSlot('RC & Insurance', Icons.description_outlined, true, _rcInsurancePath, (path) => setState(() => _rcInsurancePath = path)),
+            _buildImageCategoryBox('Front View', Icons.directions_car_outlined, frontViewImages),
+            _buildImageCategoryBox('Rear View', Icons.directions_car_outlined, rearViewImages),
+            _buildImageCategoryBox('Left & Right', Icons.camera_alt_outlined, leftRightImages),
+            _buildImageCategoryBox('Interior & Dash', Icons.dashboard_outlined, interiorDashImages),
+            _buildImageCategoryBox('Engine & Tyres', Icons.build_outlined, engineTyresImages),
+            _buildImageCategoryBox('RC & Insurance', Icons.description_outlined, rcInsuranceImages),
           ],
         ),
         const SizedBox(height: 32),
@@ -1094,6 +1239,10 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           height: 56,
           child: ElevatedButton(
             onPressed: () {
+              if (frontViewImages.isEmpty || rearViewImages.isEmpty || leftRightImages.isEmpty || interiorDashImages.isEmpty || engineTyresImages.isEmpty || rcInsuranceImages.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload at least 1 photo for all 6 categories')));
+                return;
+              }
               setState(() {
                 _currentStep = 5; // Go to step 5
               });
@@ -1136,180 +1285,6 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildUploadedPhotoCard(String label, String imageUrl) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Stack(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                imageUrl,
-                height: 120,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.check_circle, color: orange, size: 16),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: navyBlue, fontSize: 12)),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text('Uploaded', style: TextStyle(color: orange, fontSize: 10, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Future<void> _pickImage(Function(String) onImagePicked) async {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Wrap(
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Choose from Files'),
-                onTap: () async {
-                  Navigator.of(context).pop();
-                  final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-                  if (image != null) {
-                    onImagePicked(image.path);
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera),
-                title: const Text('Take Photo'),
-                onTap: () async {
-                  Navigator.of(context).pop();
-                  final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
-                  if (photo != null) {
-                    onImagePicked(photo.path);
-                  }
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildUploadSlot(String label, IconData icon, bool isOptional, String? imagePath, Function(String) onImagePicked) {
-    if (imagePath != null) {
-      return InkWell(
-        onTap: () => _pickImage(onImagePicked),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(
-                      File(imagePath),
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.check_circle, color: orange, size: 16),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: navyBlue, fontSize: 12), overflow: TextOverflow.ellipsis)),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text('Uploaded', style: TextStyle(color: orange, fontSize: 10, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
-    return InkWell(
-      onTap: () => _pickImage(onImagePicked),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[300]!, style: BorderStyle.solid),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.grey, size: 32),
-            const SizedBox(height: 12),
-            Text(
-              label,
-              style: TextStyle(fontWeight: FontWeight.bold, color: navyBlue, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            if (isOptional)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text('OPTIONAL', style: TextStyle(color: orange, fontSize: 10, fontWeight: FontWeight.bold)),
-              )
-            else
-              const Text('Tap to Upload', style: TextStyle(color: Colors.grey, fontSize: 10)),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1538,7 +1513,11 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           height: 56,
           child: ElevatedButton(
             onPressed: () {
-              context.push('/confirmation/listing');
+              if (widget.isEditMode) {
+                context.pop(true);
+              } else {
+                context.push('/confirmation/listing');
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: orange,
@@ -1547,15 +1526,15 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
               ),
               elevation: 0,
             ),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Submit for Admin Verification',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  widget.isEditMode ? 'Update Listing' : 'Submit for Admin Verification',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
               ],
             ),
           ),

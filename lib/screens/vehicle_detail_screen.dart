@@ -7,10 +7,21 @@ import 'package:share_plus/share_plus.dart';
 import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 
+enum BidValidationState { empty, valid, invalid }
+
 class VehicleDetailScreen extends StatefulWidget {
   final String vehicleId;
+  final Map<String, dynamic>? vehicleData;
+  final bool isOwner;
+  final bool isPending;
 
-  const VehicleDetailScreen({super.key, required this.vehicleId});
+  const VehicleDetailScreen({
+    super.key, 
+    required this.vehicleId, 
+    this.vehicleData,
+    this.isOwner = false,
+    this.isPending = false,
+  });
 
   @override
   State<VehicleDetailScreen> createState() => _VehicleDetailScreenState();
@@ -23,7 +34,23 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   int currentBid = 3850000;
   int offerAmount = 3875000;
   
+  // Mock variables for testing banners
+  bool hasUserBid = false;
+  bool isHighestBidder = false; 
+  
   late TextEditingController _offerController;
+
+  int get minimumRequiredBid {
+    int bidsPlaced = int.tryParse(_vehicleData['bidsPlaced'].toString()) ?? 0;
+    if (bidsPlaced == 0) return currentBid;
+    return currentBid + 5000; // Mock minimum increment
+  }
+
+  BidValidationState get bidState {
+    if (_offerController.text.isEmpty) return BidValidationState.empty;
+    final entered = int.tryParse(_offerController.text.replaceAll(',', '')) ?? 0;
+    return entered >= minimumRequiredBid ? BidValidationState.valid : BidValidationState.invalid;
+  }
 
   @override
   void initState() {
@@ -57,7 +84,12 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
 
   void _incrementOffer(int amount) {
     setState(() {
-      offerAmount += amount;
+      int baseAmount = offerAmount;
+      if (offerAmount == 0) {
+         final entered = int.tryParse(_offerController.text.replaceAll(',', '')) ?? 0;
+         baseAmount = entered > 0 ? entered : currentBid;
+      }
+      offerAmount = baseAmount + amount;
       _offerController.text = _formatCurrency(offerAmount);
     });
   }
@@ -75,7 +107,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
   }
 
-  Map<String, dynamic> get _vehicleData => {
+  Map<String, dynamic> get _vehicleData => widget.vehicleData ?? {
     'id': widget.vehicleId,
     'title': '2022 Audi Q5 45 TFSI Quattro',
     'image': 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80',
@@ -118,7 +150,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    int difference = offerAmount - currentBid;
+    final int enteredOffer = int.tryParse(_offerController.text.replaceAll(',', '')) ?? 0;
+    int difference = enteredOffer - currentBid;
+    int bidsPlaced = int.tryParse(_vehicleData['bidsPlaced'].toString()) ?? 0;
     
     return Scaffold(
       backgroundColor: Colors.white,
@@ -173,8 +207,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 // Image Section
                 Stack(
                   children: [
-                    CustomNetworkImage(imageUrl: 
-                      'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80',
+                    CustomNetworkImage(imageUrl: _vehicleData['image'],
                       width: double.infinity,
                       height: 250,
                       fit: BoxFit.cover,
@@ -198,25 +231,44 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                         ),
                       ),
                     ),
-                    // Live Auction badge
-                    Positioned(
-                      top: 16,
-                      right: 64,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: orange,
-                          borderRadius: BorderRadius.circular(20),
+                    if (widget.isPending)
+                      Positioned(
+                        top: 16,
+                        right: 64,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: orange,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            children: const [
+                              Icon(Icons.hourglass_empty, color: Colors.white, size: 12),
+                              SizedBox(width: 6),
+                              Text('PENDING APPROVAL', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
                         ),
-                        child: Row(
-                          children: const [
-                            Icon(Icons.circle, color: Colors.white, size: 8),
-                            SizedBox(width: 6),
-                            Text('LIVE AUCTION', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ],
+                      )
+                    else
+                      Positioned(
+                        top: 16,
+                        right: 64,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: orange,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            children: const [
+                              Icon(Icons.circle, color: Colors.white, size: 8),
+                              SizedBox(width: 6),
+                              Text('LIVE AUCTION', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
                     // Bookmark
                     Positioned(
                       top: 16,
@@ -300,47 +352,140 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '2022 Audi Q5 45 TFSI Quattro',
+                        _vehicleData['title'] ?? 'Vehicle Title',
                         style: TextStyle(color: navy, fontSize: 22, fontWeight: FontWeight.bold, height: 1.2),
                       ),
                       const SizedBox(height: 24),
                       
-                      // Current Bid Card
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('CURRENT HIGHEST BID', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600)),
-                                    const SizedBox(height: 4),
-                                    Text('₹38,50,000', style: TextStyle(color: navy, fontSize: 24, fontWeight: FontWeight.bold)),
-                                  ],
+                      // Banners
+                      if (hasUserBid)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 24),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isHighestBidder ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isHighestBidder ? Icons.check_circle : Icons.warning_amber,
+                                color: isHighestBidder ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  isHighestBidder 
+                                    ? "You're currently the highest bidder!" 
+                                    : "You've been outbid! Current highest is ₹${_formatCurrency(currentBid)}",
+                                  style: TextStyle(
+                                    color: isHighestBidder ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                                const Text('18 Bids Placed', style: TextStyle(color: Color(0xFFFB7800), fontSize: 14, fontWeight: FontWeight.w600)),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                const Icon(Icons.circle, color: Colors.green, size: 8),
-                                const SizedBox(width: 8),
-                                Text('Reserve met • Fast-track transfer verified', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                      
+                      // Current Bid Card
+                      if (bidsPlaced == 0)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border(
+                              left: BorderSide(color: orange, width: 4),
+                              top: BorderSide(color: Colors.grey.shade300),
+                              right: BorderSide(color: Colors.grey.shade300),
+                              bottom: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Starting Price', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600)),
+                                        const SizedBox(height: 4),
+                                        Text('₹${_vehicleData['currentBid']}', style: TextStyle(color: navy, fontSize: 24, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: orange.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      '🏁 First Bid Opportunity',
+                                      style: TextStyle(color: orange, fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Icon(Icons.flag_circle, color: orange, size: 24),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('No Bids Yet', style: TextStyle(color: navy, fontSize: 16, fontWeight: FontWeight.bold)),
+                                      const Text('Be the first to bid on this vehicle!', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('CURRENT HIGHEST BID', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600)),
+                                      const SizedBox(height: 4),
+                                      Text('₹${_vehicleData['currentBid']}', style: TextStyle(color: navy, fontSize: 24, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                  Text('${_vehicleData['bidsPlaced']} Bids Placed', style: const TextStyle(color: Color(0xFFFB7800), fontSize: 14, fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  const Icon(Icons.circle, color: Colors.green, size: 8),
+                                  const SizedBox(width: 8),
+                                  Text('Reserve met • Fast-track transfer verified', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       const SizedBox(height: 24),
                       
                       // Instant Increments
@@ -362,14 +507,21 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('Your Offer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          Text('Min: ₹38,75,000', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+                          Text('Min: ₹${_formatCurrency(minimumRequiredBid)}', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
                         ],
                       ),
                       const SizedBox(height: 12),
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          border: Border.all(color: Colors.grey.shade300),
+                          border: Border.all(
+                            color: bidState == BidValidationState.valid
+                                ? const Color(0xFF22C55E) // Green
+                                : bidState == BidValidationState.invalid
+                                    ? const Color(0xFFEF4444) // Red
+                                    : Colors.grey.shade300, // Neutral
+                            width: bidState == BidValidationState.empty ? 1 : 2,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: TextField(
@@ -387,42 +539,80 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                       ),
                       const SizedBox(height: 8),
                       
-                      // Helper text
-                      Row(
-                        children: [
-                          Icon(Icons.trending_up, color: orange, size: 16),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Increases current bid by ₹${_formatCurrency(difference >= 0 ? difference : 0)}',
-                            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                          ),
-                        ],
-                      ),
+                      // Validation Helper text
+                      if (bidState == BidValidationState.empty)
+                        Row(
+                          children: [
+                            const SizedBox(width: 4),
+                            Text(
+                              'Enter an amount of at least ₹${_formatCurrency(minimumRequiredBid)}',
+                              style: const TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                          ],
+                        )
+                      else if (bidState == BidValidationState.valid)
+                        Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Valid bid — increases current bid by ₹${_formatCurrency(difference)}',
+                              style: const TextStyle(color: Color(0xFF16A34A), fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        )
+                      else
+                        Row(
+                          children: [
+                            const Icon(Icons.cancel, color: Color(0xFFEF4444), size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Bid too low — minimum is ₹${_formatCurrency(minimumRequiredBid)}',
+                              style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
                       const SizedBox(height: 32),
                       
                       // Place Bid Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            context.push('/confirmation/bid');
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: orange,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 0,
+                      if (widget.isOwner)
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: null, // Disabled for owner
+                            style: ElevatedButton.styleFrom(
+                              disabledBackgroundColor: Colors.grey.shade300,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                            child: const Text('You cannot bid on your own listing', style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.bold)),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(Icons.gavel, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text('Place Bid', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                            ],
+                        )
+                      else
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: (bidState == BidValidationState.valid) ? () {
+                              context.push('/confirmation/bid');
+                            } : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: orange,
+                              disabledBackgroundColor: Colors.grey.shade300,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(Icons.gavel, color: Colors.white),
+                                SizedBox(width: 8),
+                                Text('Place Bid', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                       const SizedBox(height: 24), // Bottom padding
                     ],
                   ),
