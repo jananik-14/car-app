@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
+import '../widgets/responsive_secondary_scaffold.dart';
 
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
@@ -34,7 +35,8 @@ class HelpSupportScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ResponsiveSecondaryScaffold(
+      currentIndex: 4,
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Help & Support'),
@@ -51,7 +53,8 @@ class HelpSupportScreen extends StatelessWidget {
           fontWeight: FontWeight.bold,
         ),
       ),
-      body: ListView(
+      child: ListView(
+        shrinkWrap: true, // Need this inside Column
         padding: const EdgeInsets.all(24.0),
         children: [
           const Text(

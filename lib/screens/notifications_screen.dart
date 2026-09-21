@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../widgets/responsive_layout_wrapper.dart';
-import '../widgets/shared_bottom_nav.dart';
+import '../widgets/responsive_nav_scaffold.dart';
+import '../utils/global_store.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -17,28 +17,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final scrollableContent = Column(
       children: [
-        _buildTopBar(),
         _buildHeader(),
         _buildNotificationList(),
       ],
     );
 
-    return ResponsiveLayoutWrapper(
-      mobileContent: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: scrollableContent,
-            ),
-          ),
-          const SharedBottomNav(currentIndex: 3),
-        ],
-      ),
-      desktopContent: Column(
-        children: [
-          scrollableContent,
-          const SharedBottomNav(currentIndex: 3),
-        ],
+    return ResponsiveNavScaffold(
+      currentIndex: 3,
+      body: SingleChildScrollView(
+        child: scrollableContent,
       ),
     );
   }
@@ -100,36 +87,42 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              const Text(
-                'Notifications',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-              ),
-              if (!_isCleared) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: AppColors.secondaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Text(
-                    '4',
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Notifications',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      height: 1.0,
+                      color: AppColors.primary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (!_isCleared) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: AppColors.secondaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Text(
+                      '4',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        height: 1.0,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
           GestureDetector(
             onTap: () {
@@ -194,6 +187,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: Column(
         children: [
+          ...GlobalStore.notifications.map((notif) {
+            return Column(
+              children: [
+                _buildNotificationCard(
+                  iconData: notif['iconData'],
+                  iconColor: notif['iconColor'],
+                  iconBgColor: notif['iconBgColor'],
+                  title: notif['title'],
+                  boldHighlight: notif['boldHighlight'],
+                  highlightColor: notif['highlightColor'],
+                  content: notif['content'],
+                  time: notif['time'],
+                  showDot: notif['showDot'],
+                  dotColor: notif['dotColor'],
+                ),
+                const SizedBox(height: 16),
+              ],
+            );
+          }).toList(),
           _buildNotificationCard(
             iconData: Icons.gavel,
             iconColor: Colors.white,

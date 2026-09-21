@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../utils/admin_navigation_helper.dart';
 
 class AdminNavigationDrawer extends StatelessWidget {
   const AdminNavigationDrawer({super.key});
@@ -101,16 +102,16 @@ class AdminNavigationDrawer extends StatelessWidget {
                   badgeTextColor: const Color(0xFF001128),
                   onTap: () {
                     Navigator.pop(context);
-                    context.push('/notifications');
+                    context.push('/admin/notifications');
                   },
                 ),
                 _buildNavItem(
                   context,
                   icon: Icons.swap_horiz,
                   label: '6. Switch to Client Dashboard',
-                  onTap: () {
+                  onTap: () async {
                     Navigator.pop(context);
-                    context.go('/browse');
+                    await AdminNavigationHelper.confirmAndSwitchToClient(context);
                   },
                   showChevron: true,
                 ),

@@ -6,7 +6,9 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../widgets/responsive_nav_scaffold.dart';
 import '../widgets/admin_navigation_drawer.dart';
+import '../widgets/admin_app_bar.dart';
 
 class AdminClientsDetailsScreen extends StatefulWidget {
   const AdminClientsDetailsScreen({super.key});
@@ -46,10 +48,12 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ResponsiveNavScaffold(
+      isAdmin: true,
+      currentIndex: 0,
       backgroundColor: const Color(0xFFF3F4F6),
       drawer: const AdminNavigationDrawer(),
-      appBar: _buildAppBar(),
+      appBar: const AdminAppBar(),
       body: Column(
         children: [
           _buildSectionHeader(),
@@ -59,66 +63,6 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0,
-      leading: Builder(
-        builder: (context) => IconButton(
-          icon: const Icon(Icons.menu, color: Color(0xFF001128)),
-          onPressed: () => Scaffold.of(context).openDrawer(),
-        ),
-      ),
-      iconTheme: const IconThemeData(color: Color(0xFF001128)),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
-            'Wheels2Drive',
-            style: TextStyle(
-              color: Color(0xFF001128),
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            'Admin Dashboard',
-            style: TextStyle(
-              color: Color(0xFFfb7800),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.search, color: Color(0xFF001128)),
-          onPressed: () {},
-        ),
-        Container(
-          margin: const EdgeInsets.only(right: 16),
-          width: 32,
-          height: 32,
-          decoration: const BoxDecoration(
-            color: Color(0xFF001128),
-            shape: BoxShape.circle,
-          ),
-          child: const Center(
-            child: Text(
-              'AD',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -253,16 +197,20 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
     }
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF001128),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF001128),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
+        const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
@@ -272,7 +220,7 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
           child: Text(
             badgeText,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.bold,
               color: badgeTextColor,
             ),

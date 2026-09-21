@@ -7,7 +7,11 @@
 // PATCH /api/admin/subscriptions/:id (approve/reject)
 
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import '../widgets/admin_navigation_drawer.dart';
+import '../widgets/responsive_nav_scaffold.dart';
+import '../utils/global_store.dart';
+import '../widgets/admin_app_bar.dart';
 
 enum MainCategory { vehiclePosts, bidding, subscriptions }
 enum SubState { pending, accepted, rejected }
@@ -148,39 +152,46 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     },
   ];
 
-  List<Map<String, dynamic>> pendingSubscriptions = [
-    {
-      'id': 's1',
-      'businessName': 'Apex Motors Ltd',
-      'tier': 'Pro Trader',
-      'tierColor': Colors.purple,
-      'id1Label': 'GSTIN',
-      'id1Value': '27AADCA1234F1Z5',
-      'id2Label': 'User ID',
-      'id2Value': 'U-8821',
-      'timeAgo': '45 mins ago',
-      'price': '₹1,999/mo',
-      'payRef': 'UPI-90823412',
-      'paymentStatus': 'Verified',
-      'gstStatus': 'Active',
-    },
-    {
-      'id': 's2',
-      'businessName': 'Kavita Autolink',
-      'tier': 'Elite Dealer',
-      'tierColor': Colors.blue,
-      'id1Label': 'Business ID',
-      'id1Value': 'B-9923',
-      'id2Label': 'Dealer ID',
-      'id2Value': 'D-2211',
-      'timeAgo': '2 hours ago',
-      'price': '₹4,999/mo',
-      'payRef': 'NEFT-883921',
-      'paymentStatus': 'Cleared',
-      'gstStatus': 'Pending', // using KYC DOCS field for variety
-      'kycDocs': 'Attached',
-    },
-  ];
+  late List<Map<String, dynamic>> pendingSubscriptions;
+
+  @override
+  void initState() {
+    super.initState();
+    pendingSubscriptions = [
+      ...GlobalStore.pendingSubscriptions,
+      {
+        'id': 's1',
+        'businessName': 'Apex Motors Ltd',
+        'tier': 'Pro Trader',
+        'tierColor': Colors.purple,
+        'id1Label': 'GSTIN',
+        'id1Value': '27AADCA1234F1Z5',
+        'id2Label': 'User ID',
+        'id2Value': 'U-8821',
+        'timeAgo': '45 mins ago',
+        'price': '₹1,999/mo',
+        'payRef': 'UPI-90823412',
+        'paymentStatus': 'Verified',
+        'gstStatus': 'Active',
+      },
+      {
+        'id': 's2',
+        'businessName': 'Kavita Autolink',
+        'tier': 'Elite Dealer',
+        'tierColor': Colors.blue,
+        'id1Label': 'Business ID',
+        'id1Value': 'B-9923',
+        'id2Label': 'Dealer ID',
+        'id2Value': 'D-2211',
+        'timeAgo': '2 hours ago',
+        'price': '₹4,999/mo',
+        'payRef': 'NEFT-883921',
+        'paymentStatus': 'Cleared',
+        'gstStatus': 'Pending',
+        'kycDocs': 'Attached',
+      },
+    ];
+  }
 
   List<Map<String, dynamic>> acceptedSubscriptions = [
     {
@@ -332,10 +343,12 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ResponsiveNavScaffold(
+      isAdmin: true,
+      currentIndex: 3,
       backgroundColor: const Color(0xFFF3F4F6),
       drawer: const AdminNavigationDrawer(),
-      appBar: _buildAppBar(),
+      appBar: const AdminAppBar(),
       body: Column(
         children: [
           _buildHeaderSection(),
@@ -344,62 +357,6 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           Expanded(child: _buildContentArea()),
         ],
       ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0,
-      leading: Builder(
-        builder: (context) => IconButton(
-          icon: Icon(Icons.menu, color: _navy),
-          onPressed: () => Scaffold.of(context).openDrawer(),
-        ),
-      ),
-      titleSpacing: 0,
-      title: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: 24,
-              height: 24,
-              fit: BoxFit.cover,
-              errorBuilder: (_,__,___) => Icon(Icons.directions_car, color: _navy, size: 24),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Wheels2Drive',
-                style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              Text(
-                'APPROVAL HUB',
-                style: TextStyle(color: _orange, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-              ),
-            ],
-          ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(Icons.search, color: _navy),
-          onPressed: () {},
-        ),
-        Padding(
-          padding: const EdgeInsets.only(right: 16.0),
-          child: CircleAvatar(
-            radius: 16,
-            backgroundColor: _navy,
-            child: const Text('AD', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-          ),
-        ),
-      ],
     );
   }
 
@@ -441,19 +398,23 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   }
 
   Widget _buildMainCategoryTabs() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _buildMainCategoryTab(MainCategory.vehiclePosts, Icons.directions_car, 'Vehicle Posts', pendingVehicles.length),
-            const SizedBox(width: 12),
-            _buildMainCategoryTab(MainCategory.bidding, Icons.gavel, 'Bidding', pendingBids.length),
-            const SizedBox(width: 12),
-            _buildMainCategoryTab(MainCategory.subscriptions, Icons.subscriptions, 'Subscriptions', pendingSubscriptions.length),
-          ],
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildMainCategoryTab(MainCategory.vehiclePosts, Icons.directions_car, 'Vehicle Posts', pendingVehicles.length),
+              const SizedBox(width: 12),
+              _buildMainCategoryTab(MainCategory.bidding, Icons.gavel, 'Bidding', pendingBids.length),
+              const SizedBox(width: 12),
+              _buildMainCategoryTab(MainCategory.subscriptions, Icons.subscriptions, 'Subscriptions', pendingSubscriptions.length),
+            ],
+          ),
         ),
       ),
     );
@@ -513,26 +474,29 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              _buildSubStateTab(SubState.pending, 'Pending Only', _orange),
-              const SizedBox(width: 8),
-              _buildSubStateTab(SubState.accepted, 'Accepted', _green),
-              const SizedBox(width: 8),
-              _buildSubStateTab(SubState.rejected, 'Rejected', _red),
-            ],
-          ),
-          Row(
-            children: [
-              Icon(Icons.sync, color: Colors.grey.shade500, size: 14),
-              const SizedBox(width: 4),
-              Text('Live sync', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-            ],
-          )
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            Row(
+              children: [
+                _buildSubStateTab(SubState.pending, 'Pending Only', _orange),
+                const SizedBox(width: 8),
+                _buildSubStateTab(SubState.accepted, 'Accepted', _green),
+                const SizedBox(width: 8),
+                _buildSubStateTab(SubState.rejected, 'Rejected', _red),
+              ],
+            ),
+            const SizedBox(width: 16),
+            Row(
+              children: [
+                Icon(Icons.sync, color: Colors.grey.shade500, size: 14),
+                const SizedBox(width: 4),
+                Text('Live sync', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+              ],
+            )
+          ],
+        ),
       ),
     );
   }
@@ -629,7 +593,12 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Text(item['title'], style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15)),
+                          child: Text(
+                            item['title'],
+                            style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         Text(item['price'], style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15)),
                       ],
@@ -653,8 +622,9 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            runSpacing: 8,
             children: [
               _buildInfoColumn('LISTING TYPE', item['type']),
               _buildInfoColumn('RC STATUS', '● ${item['rcStatus']}', valueColor: item['rcStatus'] == 'Clear' ? _green : _orange),
@@ -804,7 +774,12 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item['title'], style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(
+                      item['title'],
+                      style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 16),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 4),
                     Text('Bidder: ${item['bidderName']} (@${item['bidderUsername']}) • Dealer ID: ${item['dealerId']}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                   ],
@@ -823,8 +798,9 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            runSpacing: 8,
             children: [
               _buildInfoColumn('TOKEN DEPOSIT', '✓ ${item['depositAmount']} Paid', valueColor: _green),
               _buildInfoColumn('ESCROW HOLD', item['escrow']),
@@ -969,12 +945,19 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                   children: [
                     Row(
                       children: [
-                        Flexible(child: Text(item['businessName'], style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15), overflow: TextOverflow.ellipsis)),
+                        Expanded(
+                          child: Text(
+                            item['businessName'] ?? 'Unknown Business',
+                            style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(color: item['tierColor'] ?? Colors.blue, borderRadius: BorderRadius.circular(12)),
-                          child: Text(item['tier'], style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                          child: Text(item['tier'] ?? 'Unknown Tier', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
@@ -982,12 +965,12 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                     Wrap(
                       spacing: 4,
                       children: [
-                        Text('${item['id1Label']}: ${item['id1Value']}', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                        Text('${item['id1Label'] ?? 'ID'}: ${item['id1Value'] ?? 'N/A'}', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
                         Text('•', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-                        Text('${item['id2Label']}: ${item['id2Value']}', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                        Text('${item['id2Label'] ?? 'ID'}: ${item['id2Value'] ?? 'N/A'}', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
                       ],
                     ),
-                    Text('Submitted ${item['timeAgo']}', style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic)),
+                    Text('Submitted ${item['timeAgo'] ?? 'Recently'}', style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic)),
                   ],
                 ),
               ),
@@ -995,7 +978,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text('PLAN TIER', style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.bold)),
-                  Text(item['price'], style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(item['price'] ?? 'N/A', style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15)),
                 ],
               )
             ],
@@ -1004,15 +987,16 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            runSpacing: 8,
             children: [
-              _buildInfoColumn('PAYMENT REF', item['payRef']),
-              _buildInfoColumn('PAYMENT', '✓ ${item['paymentStatus']}', valueColor: _green),
-              if (item.containsKey('gstStatus'))
+              _buildInfoColumn('PAYMENT REF', item['payRef'] ?? 'Pending'),
+              _buildInfoColumn('PAYMENT', '✓ ${item['paymentStatus'] ?? 'Awaiting Verification'}', valueColor: _green),
+              if (item.containsKey('gstStatus') && item['gstStatus'] != null)
                 _buildInfoColumn('GST STATUS', item['gstStatus'])
               else
-                _buildInfoColumn('KYC DOCS', item['kycDocs']),
+                _buildInfoColumn('KYC DOCS', item['kycDocs'] ?? 'Not Attached'),
             ],
           ),
           const SizedBox(height: 16),
@@ -1073,11 +1057,11 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     return _buildHistoryCard(
       icon: Icons.check_circle,
       iconColor: _green,
-      title: '${item['businessName']} (${item['tier']} - ${item['price']})',
-      subtitle: '${item['id1Label']}: ${item['id1Value']} • Ref: #${item['ref']}',
+      title: '${item['businessName'] ?? 'Unknown'} (${item['tier'] ?? 'Unknown'} - ${item['price'] ?? 'N/A'})',
+      subtitle: '${item['id1Label'] ?? 'ID'}: ${item['id1Value'] ?? 'N/A'} • Ref: #${item['ref'] ?? 'N/A'}',
       statusLabel: 'Approved',
       statusColor: _green,
-      time: item['time'],
+      time: item['time'] ?? 'Just now',
     );
   }
 
@@ -1085,11 +1069,11 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     return _buildHistoryCard(
       icon: Icons.cancel,
       iconColor: _red,
-      title: '${item['businessName']} (${item['tier']})',
-      subtitle: 'Dealer: ${item['dealerName']} • ${item['reason']}',
+      title: '${item['businessName'] ?? 'Unknown'} (${item['tier'] ?? 'Unknown'})',
+      subtitle: 'Dealer: ${item['dealerName'] ?? 'Unknown'} • ${item['reason'] ?? 'Rejected'}',
       statusLabel: 'Declined',
       statusColor: _red,
-      time: item['time'],
+      time: item['time'] ?? 'Just now',
     );
   }
 
@@ -1113,15 +1097,24 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.circle, color: headerColor, size: 10),
-                  const SizedBox(width: 8),
-                  Text(headerText, style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                ],
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.circle, color: headerColor, size: 10),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        headerText,
+                        style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: countBadgeColor, borderRadius: BorderRadius.circular(12)),

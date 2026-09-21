@@ -95,9 +95,13 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Image.asset('assets/images/logo.png', height: 48),
               const SizedBox(height: 16),
@@ -168,6 +172,9 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
           ),
         ),
       ),
+    ),
+  ),
+),
     );
   }
 }

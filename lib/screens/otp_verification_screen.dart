@@ -244,6 +244,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         child: content,
       ),
       desktopContent: content,
+      desktopMaxWidth: 480,
     );
   }
 

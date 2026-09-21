@@ -199,6 +199,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
       desktopContent: content,
+      desktopMaxWidth: 480,
     );
   }
 

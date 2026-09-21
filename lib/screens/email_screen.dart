@@ -66,6 +66,7 @@ class _EmailScreenState extends State<EmailScreen> {
         child: ResponsiveLayoutWrapper(
           mobileContent: _buildContent(),
           desktopContent: _buildContent(),
+          desktopMaxWidth: 600,
         ),
       ),
     );

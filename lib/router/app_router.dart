@@ -13,6 +13,8 @@ import '../screens/admin_approval_center_screen.dart';
 import '../screens/admin_clients_details_screen.dart';
 import '../screens/admin_post_management_screen.dart';
 import '../screens/admin_bidding_screen.dart';
+import '../screens/admin_alerts_screen.dart';
+import '../screens/admin_notifications_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/subscription_plans_screen.dart';
 import '../screens/email_screen.dart';
@@ -94,6 +96,14 @@ class AppRouter {
       GoRoute(
         path: '/admin/bidding',
         builder: (context, state) => const AdminBiddingScreen(),
+      ),
+      GoRoute(
+        path: '/admin/alerts',
+        builder: (context, state) => const AdminAlertsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/notifications',
+        builder: (context, state) => const AdminNotificationsScreen(),
       ),
       GoRoute(
         path: '/notifications',

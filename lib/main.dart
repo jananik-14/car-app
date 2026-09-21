@@ -19,16 +19,11 @@ class Wheels2DriveApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => WatchlistProvider()),
         Provider(create: (_) => ()),
       ],
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 430),
-          child: MaterialApp.router(
-            title: 'Wheels2Drive',
-            theme: AppTheme.lightTheme,
-            routerConfig: AppRouter.router,
-            debugShowCheckedModeBanner: false,
-          ),
-        ),
+      child: MaterialApp.router(
+        title: 'Wheels2Drive',
+        theme: AppTheme.lightTheme,
+        routerConfig: AppRouter.router,
+        debugShowCheckedModeBanner: false,
       ),
     );
   }

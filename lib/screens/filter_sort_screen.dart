@@ -30,6 +30,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
   @override
   Widget build(BuildContext context) {
     return ResponsiveLayoutWrapper(
+      scrollableDesktop: false,
       mobileContent: Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(

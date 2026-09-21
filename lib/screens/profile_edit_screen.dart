@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../utils/profile_storage_helper.dart';
 import '../widgets/profile_form_fields.dart';
+import '../widgets/responsive_secondary_scaffold.dart';
 
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
@@ -33,9 +34,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   Future<void> _loadProfileData() async {
     final phone = await ProfileStorageHelper.getCurrentLoggedInPhone();
     if (phone == null) return;
-    
+
     final name = await ProfileStorageHelper.getProfileField(phone, 'user_name');
-    final email = await ProfileStorageHelper.getProfileField(phone, 'user_email');
+    final email =
+        await ProfileStorageHelper.getProfileField(phone, 'user_email');
     final city = await ProfileStorageHelper.getProfileField(phone, 'user_city');
     final dob = await ProfileStorageHelper.getProfileField(phone, 'user_dob');
 
@@ -63,10 +65,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final phone = await ProfileStorageHelper.getCurrentLoggedInPhone();
     if (phone == null) return;
 
-    await ProfileStorageHelper.saveProfileField(phone, 'user_name', _nameController.text.trim());
-    await ProfileStorageHelper.saveProfileField(phone, 'user_email', _emailController.text.trim());
-    await ProfileStorageHelper.saveProfileField(phone, 'user_city', _addressController.text.trim());
-    await ProfileStorageHelper.saveProfileField(phone, 'user_dob', _dobController.text.trim());
+    await ProfileStorageHelper.saveProfileField(
+        phone, 'user_name', _nameController.text.trim());
+    await ProfileStorageHelper.saveProfileField(
+        phone, 'user_email', _emailController.text.trim());
+    await ProfileStorageHelper.saveProfileField(
+        phone, 'user_city', _addressController.text.trim());
+    await ProfileStorageHelper.saveProfileField(
+        phone, 'user_dob', _dobController.text.trim());
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -81,7 +87,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ResponsiveSecondaryScaffold(
+      currentIndex: 4,
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Edit Profile'),
@@ -98,54 +105,60 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           fontWeight: FontWeight.bold,
         ),
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                ProfileFormFields(
-                  nameController: _nameController,
-                  emailController: _emailController,
-                  cityController: _addressController,
-                  dobController: _dobController,
-                  mobileController: _mobileController,
-                  initialProfileImageBytes: _profileImageBytes,
-                  onImageChanged: (file, bytes) {
-                    _profileImageBytes = bytes;
-                  },
-                  onChanged: () {
-                    // Update state if we wanted to validate
-                  },
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _saveChanges,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'Save Changes',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ProfileFormFields(
+                          nameController: _nameController,
+                          emailController: _emailController,
+                          cityController: _addressController,
+                          dobController: _dobController,
+                          mobileController: _mobileController,
+                          initialProfileImageBytes: _profileImageBytes,
+                          onImageChanged: (file, bytes) {
+                            _profileImageBytes = bytes;
+                          },
+                          onChanged: () {
+                            // Update state if we wanted to validate
+                          },
+                        ),
+                        const SizedBox(height: 32),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: _saveChanges,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: const Text(
+                              'Save Changes',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
     );
   }
-
 }

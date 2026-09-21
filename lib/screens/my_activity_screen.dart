@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
+import '../widgets/responsive_secondary_scaffold.dart';
 
 class MyActivityScreen extends StatefulWidget {
   const MyActivityScreen({super.key});
@@ -64,16 +65,18 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ResponsiveSecondaryScaffold(
+      currentIndex: 4,
       backgroundColor: Colors.grey.shade50,
       appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          _buildTabRow(),
-          Expanded(
-            child: _buildListContent(),
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            _buildTabRow(),
+            _buildListContent(),
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }
@@ -116,9 +119,9 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          _buildTab('My Bids', _myBids.length.toString(), 0),
-          const SizedBox(width: 12),
-          _buildTab('My Listings', _myListings.length.toString(), 1),
+          Expanded(child: _buildTab('My Bids', _myBids.length.toString(), 0)),
+          const SizedBox(width: 8),
+          Expanded(child: _buildTab('My Listings', _myListings.length.toString(), 1)),
         ],
       ),
     );
@@ -140,13 +143,18 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey.shade700,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
+            Flexible(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 8),
@@ -190,6 +198,8 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
     }
 
     return ListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: items,
     );
@@ -269,10 +279,14 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
                 Text(
                   bid['title'],
                   style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,6 +380,8 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
                 Text(
                   listing['title'],
                   style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 12),
                 Row(
