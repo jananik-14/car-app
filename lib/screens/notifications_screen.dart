@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../widgets/responsive_layout_wrapper.dart';
-import '../widgets/shared_bottom_nav.dart';
-import '../services/api_service.dart';
+import '../widgets/responsive_nav_scaffold.dart';
+import '../utils/global_store.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -13,49 +12,20 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _isCleared = false;
-  List<dynamic> _notifications = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadNotifications();
-  }
-
-  Future<void> _loadNotifications() async {
-    final notifications = await ApiService().getNotifications();
-    setState(() {
-      _notifications = notifications;
-      _isLoading = false;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     final scrollableContent = Column(
       children: [
-        _buildTopBar(),
         _buildHeader(),
         _buildNotificationList(),
       ],
     );
 
-    return ResponsiveLayoutWrapper(
-      mobileContent: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: scrollableContent,
-            ),
-          ),
-          const SharedBottomNav(currentIndex: 3),
-        ],
-      ),
-      desktopContent: Column(
-        children: [
-          scrollableContent,
-          const SharedBottomNav(currentIndex: 3),
-        ],
+    return ResponsiveNavScaffold(
+      currentIndex: 3,
+      body: SingleChildScrollView(
+        child: scrollableContent,
       ),
     );
   }
@@ -117,36 +87,42 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              const Text(
-                'Notifications',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-              ),
-              if (!_isCleared) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: AppColors.secondaryContainer,
-                    shape: BoxShape.circle,
-                  ),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
                   child: Text(
-                    _isCleared ? '0' : '${_notifications.where((n) => !(n['isRead'] ?? false)).length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
+                    'Notifications',
+                    style: TextStyle(
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      height: 1.0,
+                      color: AppColors.primary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (!_isCleared) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: AppColors.secondaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Text(
+                      '4',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        height: 1.0,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
           GestureDetector(
             onTap: () {
@@ -182,14 +158,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildNotificationList() {
-    if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.all(48.0),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_isCleared || _notifications.isEmpty) {
+    if (_isCleared) {
       return Padding(
         padding: const EdgeInsets.all(48.0),
         child: Column(
@@ -218,32 +187,74 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: Column(
         children: [
-          ..._notifications.map((notification) {
-            bool isRead = notification['isRead'] ?? false;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16.0),
-              child: GestureDetector(
-                onTap: () async {
-                  if (!isRead) {
-                    await ApiService().markNotificationAsRead(notification['_id']);
-                    _loadNotifications();
-                  }
-                },
-                child: _buildNotificationCard(
-                  iconData: Icons.notifications,
-                  iconColor: isRead ? AppColors.primary : Colors.white,
-                  iconBgColor: isRead ? const Color(0xFFEEF1F7) : AppColors.secondaryContainer,
-                  title: notification['title'] ?? '',
-                  boldHighlight: '',
-                  highlightColor: AppColors.primary,
-                  content: notification['message'] ?? '',
-                  time: 'Just now', // Ideally formatted from notification['createdAt']
-                  showDot: !isRead,
-                  dotColor: AppColors.secondaryContainer,
+          ...GlobalStore.notifications.map((notif) {
+            return Column(
+              children: [
+                _buildNotificationCard(
+                  iconData: notif['iconData'],
+                  iconColor: notif['iconColor'],
+                  iconBgColor: notif['iconBgColor'],
+                  title: notif['title'],
+                  boldHighlight: notif['boldHighlight'],
+                  highlightColor: notif['highlightColor'],
+                  content: notif['content'],
+                  time: notif['time'],
+                  showDot: notif['showDot'],
+                  dotColor: notif['dotColor'],
                 ),
-              ),
+                const SizedBox(height: 16),
+              ],
             );
           }).toList(),
+          _buildNotificationCard(
+            iconData: Icons.gavel,
+            iconColor: Colors.white,
+            iconBgColor: AppColors.secondaryContainer,
+            title: 'Outbid on ',
+            boldHighlight: 'Audi Q5',
+            highlightColor: AppColors.secondaryContainer,
+            content: '. New highest bid is ₹39.00 Lakhs.',
+            time: '10m ago',
+            showDot: true,
+            dotColor: AppColors.secondaryContainer,
+          ),
+          const SizedBox(height: 16),
+          _buildNotificationCard(
+            iconData: Icons.check,
+            iconColor: Colors.white,
+            iconBgColor: AppColors.primary,
+            title: 'Listing Approved: ',
+            boldHighlight: 'Tata Harrier',
+            highlightColor: AppColors.primary,
+            content: ' is now live in auction.',
+            time: '1h ago',
+            showDot: true,
+            dotColor: AppColors.outline,
+          ),
+          const SizedBox(height: 16),
+          _buildNotificationCard(
+            iconData: Icons.notifications_active,
+            iconColor: AppColors.primary,
+            iconBgColor: const Color(0xFFEEF1F7),
+            title: 'Auction starts in 15 mins for ',
+            boldHighlight: 'BMW 3 Series',
+            highlightColor: AppColors.primary,
+            content: '.',
+            time: '3h ago',
+            showDot: false,
+          ),
+          const SizedBox(height: 16),
+          _buildNotificationCard(
+            iconData: Icons.account_balance_wallet,
+            iconColor: AppColors.primary,
+            iconBgColor: const Color(0xFFEEF1F7),
+            title: 'Token deposit of ₹25,000 received successfully.',
+            boldHighlight: '',
+            highlightColor: AppColors.primary,
+            content: '',
+            time: 'Yesterday',
+            showDot: false,
+          ),
           const SizedBox(height: 32),
         ],
       ),

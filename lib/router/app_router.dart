@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 import '../screens/login_screen.dart';
+import '../screens/profile_creation_screen.dart';
 import '../screens/otp_verification_screen.dart';
 import '../screens/terms_conditions_screen.dart';
 import '../screens/browse_vehicles_screen.dart';
@@ -8,11 +9,19 @@ import '../screens/vehicle_detail_screen.dart';
 import '../screens/inspection_report_screen.dart';
 import '../screens/post_vehicle_form_screen.dart';
 import '../screens/confirmation_screen.dart';
-import '../screens/admin_approval_screen.dart';
+import '../screens/admin_approval_center_screen.dart';
+import '../screens/admin_clients_details_screen.dart';
+import '../screens/admin_post_management_screen.dart';
+import '../screens/admin_bidding_screen.dart';
+import '../screens/admin_alerts_screen.dart';
+import '../screens/admin_notifications_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/subscription_plans_screen.dart';
 import '../screens/email_screen.dart';
 import '../screens/debug_menu_screen.dart';
+import '../screens/my_activity_screen.dart';
+import '../screens/profile_edit_screen.dart';
+import '../screens/help_support_screen.dart';
 
 import '../services/auth_service.dart';
 
@@ -26,7 +35,14 @@ class AppRouter {
       ),
       GoRoute(
         path: '/otp',
-        builder: (context, state) => const OtpVerificationScreen(),
+        builder: (context, state) {
+          final phone = state.extra as String? ?? '';
+          return OtpVerificationScreen(phoneNumber: phone);
+        },
+      ),
+      GoRoute(
+        path: '/profile_creation',
+        builder: (context, state) => const ProfileCreationScreen(),
       ),
       GoRoute(
         path: '/terms',
@@ -67,13 +83,27 @@ class AppRouter {
       ),
       GoRoute(
         path: '/admin',
-        redirect: (context, state) {
-          if (AuthService.currentUserRole != 'admin') {
-            return '/notifications'; // Skip admin screen for non-admins
-          }
-          return null;
-        },
-        builder: (context, state) => const AdminApprovalScreen(),
+        builder: (context, state) => const AdminClientsDetailsScreen(),
+      ),
+      GoRoute(
+        path: '/admin-approval',
+        builder: (context, state) => const AdminApprovalCenterScreen(),
+      ),
+      GoRoute(
+        path: '/admin/post-management',
+        builder: (context, state) => const AdminPostManagementScreen(),
+      ),
+      GoRoute(
+        path: '/admin/bidding',
+        builder: (context, state) => const AdminBiddingScreen(),
+      ),
+      GoRoute(
+        path: '/admin/alerts',
+        builder: (context, state) => const AdminAlertsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/notifications',
+        builder: (context, state) => const AdminNotificationsScreen(),
       ),
       GoRoute(
         path: '/notifications',
@@ -93,6 +123,18 @@ class AppRouter {
       GoRoute(
         path: '/debug',
         builder: (context, state) => const DebugMenuScreen(),
+      ),
+      GoRoute(
+        path: '/my_activity',
+        builder: (context, state) => const MyActivityScreen(),
+      ),
+      GoRoute(
+        path: '/profile_edit',
+        builder: (context, state) => const ProfileEditScreen(),
+      ),
+      GoRoute(
+        path: '/help_support',
+        builder: (context, state) => const HelpSupportScreen(),
       ),
     ],
   );

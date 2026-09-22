@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
-import '../widgets/responsive_layout_wrapper.dart';
+import '../widgets/responsive_secondary_scaffold.dart';
 
 class InspectionReportScreen extends StatelessWidget {
   final String vehicleId;
@@ -15,7 +15,8 @@ class InspectionReportScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ResponsiveSecondaryScaffold(
+      currentIndex: 0,
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -71,10 +72,7 @@ class InspectionReportScreen extends StatelessWidget {
           SizedBox(width: 48), // Balance the leading back button
         ],
       ),
-      body: ResponsiveLayoutWrapper(
-        mobileContent: _buildBody(context),
-        desktopContent: _buildBody(context),
-      ),
+      child: _buildBody(context),
       bottomNavigationBar: _buildBottomBar(context),
     );
   }

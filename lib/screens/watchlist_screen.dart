@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../providers/watchlist_provider.dart';
-import '../widgets/shared_bottom_nav.dart';
+import '../utils/watchlist_store.dart';
+import '../widgets/responsive_nav_scaffold.dart';
+import '../utils/responsive_helper.dart';
 import 'filter_sort_screen.dart';
 
 class WatchlistScreen extends StatefulWidget {
@@ -19,47 +20,37 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
   int _selectedTabIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<WatchlistProvider>(context, listen: false).loadWatchlist();
-    });
-  }
-
+  // Dummy data arrays for other tabs
   final List<Map<String, dynamic>> _upcomingVehicles = [
     {
-      'id': 'up1',
-      'title': '2022 Tata Nexon EV Max',
-      'image': 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=400&q=80',
+      'id': 'u1',
+      'title': '2022 Hyundai Creta SX',
+      'specs': '2022 • Petrol • 12,500 km',
+      'status': 'Starts in 2 Days',
+      'image': 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80',
     }
   ];
 
   final List<Map<String, dynamic>> _closedVehicles = [
     {
-      'id': 'cl1',
-      'title': '2020 Honda City ZX CVT',
-      'image': 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=400&q=80',
-      'won': true,
-      'price': '11,40,000'
-    },
-    {
-      'id': 'cl2',
-      'title': '2019 Hyundai Venue SX',
-      'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=400&q=80',
-      'won': false,
-      'price': '8,25,000'
+      'id': 'c1',
+      'title': '2020 Kia Seltos GTX+',
+      'specs': '2020 • Diesel • 45,000 km',
+      'status': 'Won for ₹14.5L',
+      'image': 'https://images.unsplash.com/photo-1632823469796-03c6214be266?auto=format&fit=crop&w=400&q=80',
     }
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ResponsiveNavScaffold(
+      currentIndex: 1,
       backgroundColor: Colors.grey.shade50,
       appBar: _buildAppBar(),
-      body: Consumer<WatchlistProvider>(
-        builder: (context, provider, child) {
-          final savedVehicles = provider.savedVehicles;
+      body: ListenableBuilder(
+        listenable: WatchlistStore(),
+        builder: (context, child) {
+          final savedVehicles = WatchlistStore().savedVehicles;
           return Column(
             children: [
               _buildHeadingRow(savedVehicles.length),
@@ -72,7 +63,6 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           );
         },
       ),
-      bottomNavigationBar: const SharedBottomNav(currentIndex: 1),
     );
   }
 
@@ -82,25 +72,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       elevation: 0,
       scrolledUnderElevation: 0,
       automaticallyImplyLeading: false,
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset('assets/images/logo.png', height: 24, fit: BoxFit.contain),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Wheels2Drive',
-                style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const Text(
-                'Watchlist',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            ],
-          ),
-        ],
+      title: Text(
+        'Watchlist',
+        style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 22),
       ),
       actions: [
         IconButton(
@@ -150,11 +124,11 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _buildTab('Live Bids', liveCount.toString(), 0),
-          const SizedBox(width: 12),
-          _buildTab('Upcoming', _upcomingVehicles.length.toString(), 1),
-          const SizedBox(width: 12),
-          _buildTab('Closed/Won', _closedVehicles.length.toString(), 2),
+          Expanded(child: _buildTab('Live Bids', liveCount.toString(), 0)),
+          const SizedBox(width: 8),
+          Expanded(child: _buildTab('Upcoming', _upcomingVehicles.length.toString(), 1)),
+          const SizedBox(width: 8),
+          Expanded(child: _buildTab('Closed/Won', _closedVehicles.length.toString(), 2)),
         ],
       ),
     );
@@ -176,13 +150,18 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey.shade700,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
+            Flexible(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 6),
@@ -262,11 +241,40 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       }
     }
     
-    items.add(_buildInfoBanner());
+    Widget listOrGrid;
+    if (items.isEmpty) {
+      listOrGrid = _buildEmptyState();
+    } else {
+      listOrGrid = ResponsiveHelper.isMobile(context)
+          ? ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: items.length,
+              itemBuilder: (context, index) => Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: items[index],
+              ),
+            )
+          : GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: ResponsiveHelper.gridColumns(context),
+                childAspectRatio: 0.60,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: items.length,
+              itemBuilder: (context, index) => items[index],
+            );
+    }
     
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: items,
+      children: [
+        listOrGrid,
+        if (items.isNotEmpty) _buildInfoBanner(),
+      ],
     );
   }
 
@@ -302,6 +310,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Stack(
             children: [
@@ -400,10 +409,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.red.shade200),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 20),
                           const SizedBox(width: 8),
@@ -442,7 +454,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: orange,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       elevation: 0,
                     ),
                     child: const Text('Place ₹39,00,000 (+₹25,000)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
@@ -467,6 +479,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Stack(
             children: [
@@ -555,8 +568,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.grey.shade200),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -594,7 +609,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                           foregroundColor: navyBlue,
                           side: BorderSide(color: navyBlue),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
                         ),
                       ),
                     ),
@@ -608,7 +623,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: orange,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
                           elevation: 0,
                         ),
                       ),

@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
-import '../widgets/responsive_layout_wrapper.dart';
-import '../widgets/shared_bottom_nav.dart';
+import '../widgets/responsive_nav_scaffold.dart';
+import '../utils/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import '../providers/watchlist_provider.dart';
 import 'filter_sort_screen.dart';
@@ -21,6 +21,8 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
   int _bottomNavIndex = 0;
   Timer? _refreshTimer;
   bool _isRefreshing = false;
+  String searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
   
   // Dummy data for vehicles
   final List<Map<String, dynamic>> _vehicles = [
@@ -53,6 +55,16 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
     },
   ];
 
+  List<Map<String, dynamic>> get filteredVehicles {
+    if (searchQuery.isEmpty) return _vehicles;
+    final query = searchQuery.toLowerCase();
+    return _vehicles.where((v) {
+      final title = (v['title']?.toString() ?? '').toLowerCase();
+      final specs = (v['specs']?.toString() ?? '').toLowerCase();
+      return title.contains(query) || specs.contains(query);
+    }).toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +76,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -90,36 +103,73 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
     const lightBlueGrey = Color(0xFFEEF1F7);
 
     final scrollableContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTopBar(lightBlueGrey),
-        _buildSearchBar(lightBlueGrey),
+        Builder(
+          builder: (innerContext) => _buildSearchBar(innerContext, lightBlueGrey),
+        ),
         _buildSectionHeader(lightBlueGrey),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          itemCount: _vehicles.length,
-          itemBuilder: (context, index) => _buildVehicleCard(_vehicles[index], lightBlueGrey),
+        Builder(
+          builder: (context) {
+            final currentVehicles = filteredVehicles;
+            if (currentVehicles.isEmpty && searchQuery.isNotEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 64.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.search_off, size: 60, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    Text(
+                      "No vehicles found for '$searchQuery'",
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Try a different car, model, or city",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return ResponsiveHelper.isMobile(context)
+                ? ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    itemCount: currentVehicles.length,
+                    itemBuilder: (context, index) => _buildVehicleCard(currentVehicles[index], lightBlueGrey),
+                  )
+                : GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: ResponsiveHelper.gridColumns(context),
+                      childAspectRatio: 0.60,
+                      crossAxisSpacing: 24,
+                      mainAxisSpacing: 24,
+                    ),
+                    itemCount: currentVehicles.length,
+                    itemBuilder: (context, index) => _buildVehicleCard(currentVehicles[index], lightBlueGrey),
+                  );
+          },
         ),
       ],
     );
 
-    return ResponsiveLayoutWrapper(
-      mobileContent: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: scrollableContent,
-            ),
-          ),
-          _buildBottomNav(),
-        ],
-      ),
-      desktopContent: Column(
-        children: [
-          scrollableContent,
-          _buildBottomNav(),
-        ],
+    return ResponsiveNavScaffold(
+      currentIndex: 0,
+      body: SingleChildScrollView(
+        child: scrollableContent,
       ),
     );
   }
@@ -166,7 +216,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
     );
   }
 
-  Widget _buildSearchBar(Color lightBlueGrey) {
+  Widget _buildSearchBar(BuildContext context, Color lightBlueGrey) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
       child: Row(
@@ -186,6 +236,12 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
+                      controller: _searchController,
+                      onChanged: (value) {
+                        setState(() {
+                          searchQuery = value;
+                        });
+                      },
                       decoration: InputDecoration(
                         hintText: 'Search car, model, city...',
                         hintStyle: const TextStyle(
@@ -193,7 +249,18 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                           fontSize: 14,
                         ),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.only(bottom: 12),
+                        contentPadding: const EdgeInsets.only(bottom: 12, top: 12),
+                        suffixIcon: searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    searchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
                       ),
                     ),
                   ),
@@ -208,7 +275,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                 context: context,
                 isScrollControlled: true,
                 backgroundColor: Colors.transparent,
-                builder: (context) => const FilterSortScreen(),
+                builder: (BuildContext context) => const FilterSortScreen(),
               ).then((result) {
                 if (result != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -330,6 +397,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Image Area
             Stack(
@@ -452,8 +520,10 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                       color: lightBlueGrey,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -488,6 +558,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                             ),
                             const SizedBox(height: 4),
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Icon(Icons.access_time, size: 12, color: AppColors.secondaryContainer),
                                 const SizedBox(width: 4),
@@ -515,7 +586,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                           onPressed: () => context.push('/inspection/${vehicle['id']}'),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppColors.primary, width: 1.5),
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -549,7 +620,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.secondaryContainer,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -561,7 +632,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                               Text(
                                 'Bid Now',
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -583,7 +654,5 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
   }
 
 
-  Widget _buildBottomNav() {
-    return const SharedBottomNav(currentIndex: 0);
-  }
+
 }

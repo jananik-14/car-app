@@ -22,7 +22,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
   final Set<String> _selectedFuelTypes = {'Petrol', 'Diesel'};
   String _selectedTransmission = 'Automatic';
   final Set<String> _selectedBodyTypes = {'Sedan'};
-  final Set<String> _selectedStates = {'TN - Tamil Nadu'};
+  final Set<String> _selectedStates = {'All India'};
   bool _is140PtCertified = true;
   bool _isNonAccidental = true;
   String? _selectedPricePill;
@@ -30,6 +30,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
   @override
   Widget build(BuildContext context) {
     return ResponsiveLayoutWrapper(
+      scrollableDesktop: false,
       mobileContent: Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
@@ -718,11 +719,20 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
 
   Widget _buildStateHubSection() {
     final states = [
+      'All India',
       'TN - Tamil Nadu',
       'KA - Karnataka',
       'MH - Maharashtra',
       'DL - Delhi NCR',
       'HR - Haryana',
+      'UP - Uttar Pradesh',
+      'GJ - Gujarat',
+      'RJ - Rajasthan',
+      'WB - West Bengal',
+      'TS - Telangana',
+      'KL - Kerala',
+      'PB - Punjab',
+      'MP - Madhya Pradesh',
     ];
 
     return Padding(
@@ -747,11 +757,8 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
               return GestureDetector(
                 onTap: () {
                   setState(() {
-                    if (isSelected) {
-                      _selectedStates.remove(state);
-                    } else {
-                      _selectedStates.add(state);
-                    }
+                    _selectedStates.clear();
+                    _selectedStates.add(state);
                   });
                 },
                 child: Container(
@@ -958,9 +965,9 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: const Text(
-                        '24 Lots Found',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+                      child: Text(
+                        _selectedStates.contains('All India') ? '142 Lots Found' : '24 Lots Found',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
                       ),
                     ),
                     const SizedBox(width: 8),

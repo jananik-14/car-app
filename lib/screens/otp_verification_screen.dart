@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
+import '../utils/temp_admin_config.dart';
+import '../utils/profile_storage_helper.dart';
 import '../widgets/responsive_layout_wrapper.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
-  const OtpVerificationScreen({super.key});
+  final String phoneNumber;
+  const OtpVerificationScreen({super.key, this.phoneNumber = ''});
 
   @override
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
@@ -115,9 +119,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      '+91 98765 43210',
-                      style: TextStyle(
+                    Text(
+                      widget.phoneNumber.isNotEmpty ? widget.phoneNumber : '+91 98765 43210',
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary,
                       ),
@@ -162,7 +166,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               
               // Primary Button
               ElevatedButton(
-                onPressed: () => context.push('/terms'),
+                onPressed: () => _handleOtpVerified(widget.phoneNumber),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary, // Dark Navy
                   foregroundColor: Colors.white,
@@ -240,7 +244,36 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         child: content,
       ),
       desktopContent: content,
+      desktopMaxWidth: 480,
     );
+  }
+
+  Future<void> _handleOtpVerified(String enteredPhoneNumber) async {
+    // Set the global current logged in phone for other screens to use
+    await ProfileStorageHelper.setCurrentLoggedInPhone(enteredPhoneNumber);
+    
+    final bool isProfileComplete = await ProfileStorageHelper.isProfileComplete(enteredPhoneNumber);
+
+    print('DEBUG: Phone entered = $enteredPhoneNumber, isAdmin = ${TempAdminConfig.isAdminNumber(enteredPhoneNumber)}, isProfileComplete = $isProfileComplete');
+
+    // TEMPORARY FRONTEND-ONLY ADMIN CHECK — remove once backend sends real role-based login
+    if (TempAdminConfig.isAdminNumber(enteredPhoneNumber)) {
+      if (context.mounted) {
+        context.go('/admin');
+      }
+      return;
+    }
+
+    // Regular customer flow
+    if (!isProfileComplete) {
+      if (context.mounted) {
+        context.go('/profile_creation');
+      }
+    } else {
+      if (context.mounted) {
+        context.go('/terms');
+      }
+    }
   }
 
   Widget _buildOtpBox(int index) {
