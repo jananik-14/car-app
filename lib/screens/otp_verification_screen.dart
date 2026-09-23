@@ -3,8 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../utils/temp_admin_config.dart';
-import '../utils/profile_storage_helper.dart';
 import '../widgets/responsive_layout_wrapper.dart';
+import '../services/api_service.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -249,30 +249,51 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   Future<void> _handleOtpVerified(String enteredPhoneNumber) async {
-    // Set the global current logged in phone for other screens to use
-    await ProfileStorageHelper.setCurrentLoggedInPhone(enteredPhoneNumber);
-    
-    final bool isProfileComplete = await ProfileStorageHelper.isProfileComplete(enteredPhoneNumber);
-
-    print('DEBUG: Phone entered = $enteredPhoneNumber, isAdmin = ${TempAdminConfig.isAdminNumber(enteredPhoneNumber)}, isProfileComplete = $isProfileComplete');
-
-    // TEMPORARY FRONTEND-ONLY ADMIN CHECK — remove once backend sends real role-based login
-    if (TempAdminConfig.isAdminNumber(enteredPhoneNumber)) {
-      if (context.mounted) {
-        context.go('/admin');
-      }
+    // 1. Get OTP from boxes
+    String otp = _controllers.map((c) => c.text).join('');
+    if (otp.length != 4) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter 4-digit OTP')));
       return;
     }
 
-    // Regular customer flow
-    if (!isProfileComplete) {
-      if (context.mounted) {
-        context.go('/profile_creation');
+    try {
+      final api = ApiService();
+      // 2. Verify OTP
+      await api.verifyOtp(enteredPhoneNumber, otp);
+      
+      // 3. Fetch Profile
+      final profile = await api.getProfile();
+      
+      if (profile == null) {
+        // No profile exists yet
+        if (context.mounted) {
+          context.go('/profile_creation');
+        }
+        return;
       }
-    } else {
-      if (context.mounted) {
-        context.go('/terms');
+
+      // 4. Role-based Navigation
+      final role = profile['role'];
+      final isProfileComplete = profile['isProfileComplete'] == true;
+
+      if (role == 'admin') {
+        if (context.mounted) {
+          context.go('/admin');
+        }
+      } else {
+        if (!isProfileComplete) {
+          if (context.mounted) {
+            context.go('/profile_creation');
+          }
+        } else {
+          if (context.mounted) {
+            context.go('/terms');
+          }
+        }
       }
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Verification failed: $e')));
     }
   }
 

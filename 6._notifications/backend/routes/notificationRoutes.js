@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const notificationController = require('../controllers/notificationController');
+const { getNotifications, createNotification } = require('../controllers/notificationController');
+const { protect } = require('../middleware/authMiddleware');
 
-router.get('/:phoneNumber', notificationController.getNotifications);
-router.post('/', notificationController.createNotification);
-router.patch('/:id/read', notificationController.markAsRead);
+router.get('/', protect, getNotifications);
+router.post('/create', createNotification);
 
 module.exports = router;

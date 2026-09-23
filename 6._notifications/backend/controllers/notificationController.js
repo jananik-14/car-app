@@ -1,52 +1,51 @@
-const Notification = require('../models/Notification');
+const Notification = require('../models/notificationModel');
 
-exports.getNotifications = async (req, res) => {
+// @desc    Get all notifications for a user
+// @route   GET /api/notifications
+// @access  Private
+const getNotifications = async (req, res) => {
     try {
-        const { phoneNumber } = req.params;
-        const notifications = await Notification.find({ phoneNumber }).sort({ createdAt: -1 });
-        
-        res.status(200).json({ success: true, data: notifications });
+        const notifications = await Notification.find({ recipientPhoneNumber: req.user.phoneNumber }).sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            data: notifications
+        });
     } catch (error) {
-        console.error('Error fetching notifications:', error);
+        console.error(error);
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
 
-exports.createNotification = async (req, res) => {
+// @desc    Create a new notification
+// @route   POST /api/notifications/create
+// @access  Public (In a real app, protect this so only internal services can call it)
+const createNotification = async (req, res) => {
     try {
-        const { phoneNumber, title, message } = req.body;
-        
-        if (!phoneNumber || !title || !message) {
-            return res.status(400).json({ success: false, message: 'Missing required fields' });
+        const { recipientPhoneNumber, title, body, type } = req.body;
+
+        if (!recipientPhoneNumber || !title || !body) {
+            return res.status(400).json({ success: false, message: 'Please provide recipientPhoneNumber, title, and body' });
         }
 
-        const newNotification = new Notification({
-            phoneNumber,
+        const notification = await Notification.create({
+            recipientPhoneNumber,
             title,
-            message
+            body,
+            type: type || 'info'
         });
 
-        await newNotification.save();
-
-        res.status(201).json({ success: true, message: 'Notification created', data: newNotification });
+        res.status(201).json({
+            success: true,
+            data: notification
+        });
     } catch (error) {
-        console.error('Error creating notification:', error);
+        console.error(error);
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
 
-exports.markAsRead = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const notification = await Notification.findByIdAndUpdate(id, { isRead: true }, { new: true });
-        
-        if (!notification) {
-            return res.status(404).json({ success: false, message: 'Notification not found' });
-        }
-        
-        res.status(200).json({ success: true, message: 'Marked as read', data: notification });
-    } catch (error) {
-        console.error('Error marking notification as read:', error);
-        res.status(500).json({ success: false, message: 'Server Error' });
-    }
+module.exports = {
+    getNotifications,
+    createNotification
 };

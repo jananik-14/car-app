@@ -1,5 +1,5 @@
 const Vehicle = require('../models/vehicleModel');
-
+const axios = require('axios');
 // @desc    Create a new vehicle (starts as "pending")
 // @route   POST /api/vehicle/post
 // @access  Public
@@ -7,53 +7,48 @@ const createVehicle = async (req, res) => {
     try {
         const {
             ownerPhoneNumber,
-            make,
-            model,
-            year,
-            km,
-            engineNo,
-            numberPlate,
-            chassisNo,
-            emdAmount,
-            fineAmount,
-            features,
-            inspectionReport,
-            state,
-            fuelType,
-            transmission,
-            rtoCode,
-            maxBidders
+            vehicleType, fuelType, transmission,
+            registrationNumber,
+            make, model, year, rtoCode, state, chassisNo, engineNo,
+            kmDriven, ownerCount, insuranceType, insuranceExpiryDate,
+            frontViewImages, rearViewImages, leftRightImages, interiorDashImages, engineTyresImages, rcInsuranceImages,
+            basePrice, enableReservePrice, auctionDuration
         } = req.body;
 
-        if (!ownerPhoneNumber || !numberPlate || !chassisNo) {
+        if (!ownerPhoneNumber || !registrationNumber) {
             return res.status(400).json({
                 success: false,
-                message: 'ownerPhoneNumber, numberPlate, and chassisNo are required'
+                message: 'ownerPhoneNumber and registrationNumber are required'
             });
         }
 
         const vehicle = await Vehicle.create({
             ownerPhoneNumber,
-            make,
-            model,
-            year,
-            km,
-            engineNo,
-            numberPlate,
-            chassisNo,
-            emdAmount,
-            fineAmount,
-            features: features || [],
-            inspectionReport,
-            state,
-            fuelType,
-            transmission,
-            rtoCode,
+            vehicleType, fuelType, transmission,
+            registrationNumber,
+            make, model, year, rtoCode, state, chassisNo, engineNo,
+            kmDriven, ownerCount, insuranceType, insuranceExpiryDate,
+            frontViewImages, rearViewImages, leftRightImages, interiorDashImages, engineTyresImages, rcInsuranceImages,
+            basePrice, enableReservePrice, auctionDuration,
             status: 'pending',
-            maxBidders: maxBidders !== undefined ? maxBidders : 10,
+            maxBidders: 10,
             biddingEnabled: false,
-            currentHighestBid: 0
+            currentHighestBid: 0,
+            emdAmount: 0,
+            fineAmount: 0
         });
+
+        // Trigger Notification to Admin logic here
+        try {
+            await axios.post('http://localhost:5004/api/notifications/create', {
+                recipientPhoneNumber: 'admin',
+                title: 'New Vehicle Submitted',
+                body: `A new vehicle (${registrationNumber}) has been submitted for approval by ${ownerPhoneNumber}.`,
+                type: 'info'
+            });
+        } catch (err) {
+            console.error('Failed to send notification to admin:', err.message);
+        }
 
         res.status(201).json({
             success: true,
@@ -185,15 +180,30 @@ const approveVehicle = async (req, res) => {
         }
 
         const normalizedDecision = decision.toLowerCase();
+        let notificationBody = '';
         if (normalizedDecision === 'approved') {
             vehicle.status = 'live';
             vehicle.biddingEnabled = true;
+            notificationBody = `Your vehicle (${vehicle.registrationNumber}) has been APPROVED and is now live for bidding!`;
         } else {
             vehicle.status = 'rejected';
             vehicle.biddingEnabled = false;
+            notificationBody = `Your vehicle (${vehicle.registrationNumber}) has been REJECTED. Please contact support.`;
         }
 
         await vehicle.save();
+
+        // Notify Client
+        try {
+            await axios.post('http://localhost:5004/api/notifications/create', {
+                recipientPhoneNumber: vehicle.ownerPhoneNumber,
+                title: `Vehicle ${normalizedDecision.toUpperCase()}`,
+                body: notificationBody,
+                type: normalizedDecision === 'approved' ? 'success' : 'alert'
+            });
+        } catch (err) {
+            console.error('Failed to send notification to client:', err.message);
+        }
 
         res.status(200).json({
             success: true,

@@ -27,9 +27,9 @@ class ApiService {
   static const String _vehicleBaseUrl = 'http://localhost:5001/api/vehicle';
   static const String _bidBaseUrl = 'http://localhost:5002/api/bid';
   static const String _subscriptionBaseUrl = 'http://localhost:5003/api/subscription';
-  static const String _notificationBaseUrl = 'http://localhost:5004/api/notification';
+  static const String _notificationBaseUrl = 'http://localhost:5004/api/notifications';
   static const String _watchlistBaseUrl = 'http://localhost:5005/api/watchlist';
-
+  static const String _profileBaseUrl = 'http://localhost:5006/api/profile';
   // 1. Auth: OTP Login
   Future<bool> sendOtp(String mobileNumber) async {
     try {
@@ -62,6 +62,19 @@ class ApiService {
     }
   }
 
+  // Profile
+  Future<Map<String, dynamic>?> getProfile() async {
+    try {
+      final response = await _dio.get('$_profileBaseUrl/me');
+      if (response.data['success'] == true) {
+        return response.data['data'];
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching profile: $e');
+      return null;
+    }
+  }
   // 2. Vehicle Listing
   Future<List<dynamic>> getVehicles() async {
     try {
@@ -105,7 +118,27 @@ class ApiService {
     }
   }
 
-  // 5. Post Vehicle
+  // 5. Post Vehicle & Upload
+  Future<List<String>> uploadImages(List<String> filePaths) async {
+    try {
+      FormData formData = FormData();
+      for (int i = 0; i < filePaths.length; i++) {
+        formData.files.add(MapEntry(
+          'images',
+          await MultipartFile.fromFile(filePaths[i]),
+        ));
+      }
+      final response = await _dio.post('$_vehicleBaseUrl/upload', data: formData);
+      if (response.data['success'] == true) {
+        return List<String>.from(response.data['data']);
+      }
+      return [];
+    } catch (e) {
+      print('Error uploading images: $e');
+      return [];
+    }
+  }
+
   Future<bool> postVehicle(Map<String, dynamic> vehicleData) async {
     try {
       vehicleData['ownerPhoneNumber'] = AuthService.phoneNumber ?? 'Unknown';

@@ -1,25 +1,26 @@
 const express = require('express');
-const mongoose = require('mongoose');
+const dotenv = require('dotenv');
 const cors = require('cors');
+const connectDB = require('./config/db');
 const notificationRoutes = require('./routes/notificationRoutes');
-require('dotenv').config();
+
+// Load env vars
+dotenv.config();
+
+// Connect to database
+connectDB();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-app.use('/api/notification', notificationRoutes);
+// Middleware
+app.use(express.json());
+app.use(cors());
+
+// Mount routers
+app.use('/api/notifications', notificationRoutes);
 
 const PORT = process.env.PORT || 5004;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wheels2drive_notifications';
 
-mongoose.connect(MONGO_URI)
-    .then(() => {
-        console.log('Connected to MongoDB - Notifications');
-        app.listen(PORT, () => {
-            console.log(`Notifications Service running on port ${PORT}`);
-        });
-    })
-    .catch(err => {
-        console.error('Database connection error:', err);
-    });
+app.listen(PORT, () => {
+    console.log(`Notifications Server running on port ${PORT}`);
+});

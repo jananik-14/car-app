@@ -1,59 +1,65 @@
-const Watchlist = require('../models/Watchlist');
+const Watchlist = require('../models/watchlistModel');
 
-exports.getWatchlist = async (req, res) => {
+// @desc    Get user's watchlist
+// @route   GET /api/watchlist
+// @access  Private
+const getWatchlist = async (req, res) => {
     try {
-        const { phoneNumber } = req.params;
-        const watchlist = await Watchlist.find({ phoneNumber }).sort({ addedAt: -1 });
-        
+        const watchlist = await Watchlist.find({ phoneNumber: req.user.phoneNumber });
         res.status(200).json({ success: true, data: watchlist });
     } catch (error) {
-        console.error('Error fetching watchlist:', error);
+        console.error(error);
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
 
-exports.addToWatchlist = async (req, res) => {
+// @desc    Add vehicle to watchlist
+// @route   POST /api/watchlist/add
+// @access  Private
+const addToWatchlist = async (req, res) => {
     try {
-        const { phoneNumber, vehicleId } = req.body;
+        const { vehicleId } = req.body;
         
-        if (!phoneNumber || !vehicleId) {
-            return res.status(400).json({ success: false, message: 'Missing required fields' });
+        if (!vehicleId) {
+            return res.status(400).json({ success: false, message: 'vehicleId is required' });
         }
 
-        const newEntry = new Watchlist({
-            phoneNumber,
+        const watchlistItem = await Watchlist.create({
+            phoneNumber: req.user.phoneNumber,
             vehicleId
         });
 
-        await newEntry.save();
-
-        res.status(201).json({ success: true, message: 'Added to watchlist', data: newEntry });
+        res.status(201).json({ success: true, data: watchlistItem });
     } catch (error) {
         if (error.code === 11000) {
             return res.status(400).json({ success: false, message: 'Vehicle already in watchlist' });
         }
-        console.error('Error adding to watchlist:', error);
+        console.error(error);
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
 
-exports.removeFromWatchlist = async (req, res) => {
+// @desc    Remove vehicle from watchlist
+// @route   POST /api/watchlist/remove
+// @access  Private
+const removeFromWatchlist = async (req, res) => {
     try {
-        const { phoneNumber, vehicleId } = req.body;
-        
-        if (!phoneNumber || !vehicleId) {
-            return res.status(400).json({ success: false, message: 'Missing required fields' });
-        }
+        const { vehicleId } = req.body;
 
-        const result = await Watchlist.findOneAndDelete({ phoneNumber, vehicleId });
-        
-        if (!result) {
-            return res.status(404).json({ success: false, message: 'Entry not found in watchlist' });
+        const watchlistItem = await Watchlist.findOneAndDelete({
+            phoneNumber: req.user.phoneNumber,
+            vehicleId
+        });
+
+        if (!watchlistItem) {
+            return res.status(404).json({ success: false, message: 'Not found in watchlist' });
         }
 
         res.status(200).json({ success: true, message: 'Removed from watchlist' });
     } catch (error) {
-        console.error('Error removing from watchlist:', error);
+        console.error(error);
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
+
+module.exports = { getWatchlist, addToWatchlist, removeFromWatchlist };

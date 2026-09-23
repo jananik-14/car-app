@@ -2,8 +2,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import '../services/auth_service.dart';
 import '../widgets/responsive_nav_scaffold.dart';
+import '../widgets/responsive_layout_wrapper.dart';
+import '../services/api_service.dart';
 import '../widgets/responsive_layout_wrapper.dart';
 
 class PostVehicleFormScreen extends StatefulWidget {
@@ -27,8 +28,10 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   String _selectedFuelType = 'Petrol';
   String _selectedTransmission = 'Manual';
 
-  // Step 3 State
-  final TextEditingController _kmController =
+  // Step 2 State
+  final TextEditingController _regNoController = TextEditingController();
+
+  // Step 3 State  final TextEditingController _kmController =
       TextEditingController(text: '42,500');
   String _selectedOwner = '1st Owner';
   String _selectedInsuranceType = 'Comprehensive (Zero Dep)';
@@ -57,6 +60,8 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
       TextEditingController(text: '5,80,000');
   bool _enableReservePrice = true;
   String _selectedDuration = '48 Hours';
+
+  bool _isSubmitting = false;
 
   // Step 4 State (Uploads)
   final ImagePicker _picker = ImagePicker();
@@ -582,6 +587,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                     width: 1, thickness: 1, color: Colors.grey[300]),
                 Expanded(
                   child: TextField(
+                    controller: _regNoController,
                     style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -1757,13 +1763,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: () {
-              if (widget.isEditMode) {
-                context.pop(true);
-              } else {
-                context.push('/confirmation/listing');
-              }
-            },
+            onPressed: _isSubmitting ? null : _submitVehicle,
             style: ElevatedButton.styleFrom(
               backgroundColor: orange,
               shape: RoundedRectangleBorder(
@@ -1774,17 +1774,25 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  widget.isEditMode
-                      ? 'Update Listing'
-                      : 'Submit for Admin Verification',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 8),
-                const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+                if (_isSubmitting)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                else ...[
+                  Text(
+                    widget.isEditMode
+                        ? 'Update Listing'
+                        : 'Submit for Admin Verification',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+                ]
               ],
             ),
           ),
@@ -1932,5 +1940,55 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _submitVehicle() async {
+    setState(() => _isSubmitting = true);
+    try {
+      final api = ApiService();
+      
+      // Collect all image paths (ignoring categorisation for now to simplify upload)
+      List<String> allImages = [
+        ...frontViewImages.map((e) => e.path),
+        ...rearViewImages.map((e) => e.path),
+        ...leftRightImages.map((e) => e.path),
+        ...interiorDashImages.map((e) => e.path),
+        ...engineTyresImages.map((e) => e.path),
+        ...rcInsuranceImages.map((e) => e.path),
+      ];
+
+      List<String> uploadedUrls = [];
+      if (allImages.isNotEmpty) {
+        uploadedUrls = await api.uploadImages(allImages);
+      }
+
+      // Map to API Schema
+      final vehicleData = {
+        "registrationNumber": _regNoController.text.trim().isEmpty ? 'DL01AB1234' : _regNoController.text.trim(),
+        "vehicleType": _selectedVehicleType,
+        "fuelType": _selectedFuelType,
+        "transmission": _selectedTransmission,
+        "kmDriven": int.tryParse(_kmController.text.replaceAll(',', '')) ?? 0,
+        "ownerCount": _selectedOwner,
+        "insuranceType": _selectedInsuranceType,
+        "basePrice": int.tryParse(_priceController.text.replaceAll(',', '')) ?? 0,
+        "enableReservePrice": _enableReservePrice,
+        "auctionDuration": _selectedDuration,
+        "frontViewImages": uploadedUrls,
+      };
+
+      final success = await api.postVehicle(vehicleData);
+      
+      if (success) {
+        if (context.mounted) context.push('/confirmation/listing');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to post vehicle.')));
+      }
+    } catch (e) {
+      print(e);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      setState(() => _isSubmitting = false);
+    }
   }
 }

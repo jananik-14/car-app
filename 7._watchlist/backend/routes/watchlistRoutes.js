@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const watchlistController = require('../controllers/watchlistController');
+const { getWatchlist, addToWatchlist, removeFromWatchlist } = require('../controllers/watchlistController');
+const { protect } = require('../middleware/authMiddleware');
 
-router.get('/:phoneNumber', watchlistController.getWatchlist);
-router.post('/add', watchlistController.addToWatchlist);
-router.delete('/remove', watchlistController.removeFromWatchlist);
+router.get('/', protect, getWatchlist);
+router.post('/add', protect, addToWatchlist);
+router.post('/remove', protect, removeFromWatchlist);
 
 module.exports = router;
