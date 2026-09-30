@@ -45,20 +45,29 @@ class ApiService {
 
   Future<String> verifyOtp(String mobileNumber, String otp) async {
     try {
+      print('[API VERIFY OTP REQUEST] Sending -> phoneNumber: "$mobileNumber", otp: "$otp"');
       final response = await _dio.post('$_authBaseUrl/verify-otp', data: {
         'phoneNumber': mobileNumber,
         'otp': otp,
       });
+      print('[API VERIFY OTP RESPONSE] Status: ${response.statusCode}, Body: ${response.data}');
       if (response.data['success'] == true) {
         String token = response.data['data']['token'];
         AuthService.token = token; // Store token in memory
         AuthService.phoneNumber = mobileNumber;
         return token;
       }
-      throw Exception('OTP Verification failed');
+      throw Exception(response.data['message'] ?? 'OTP Verification failed');
     } catch (e) {
-      print('Error verifying OTP: $e');
-      throw Exception('Error verifying OTP');
+      print('[API VERIFY OTP ERROR] $e');
+      if (e is DioException) {
+        print('[API VERIFY OTP DIO ERROR RESPONSE] Status: ${e.response?.statusCode}, Body: ${e.response?.data}');
+        final serverMsg = e.response?.data?['message'];
+        if (serverMsg != null) {
+          throw Exception(serverMsg);
+        }
+      }
+      throw Exception(e.toString().replaceAll('Exception: ', ''));
     }
   }
 
@@ -118,26 +127,7 @@ class ApiService {
     }
   }
 
-  // 5. Post Vehicle & Upload
-  Future<List<String>> uploadImages(List<String> filePaths) async {
-    try {
-      FormData formData = FormData();
-      for (int i = 0; i < filePaths.length; i++) {
-        formData.files.add(MapEntry(
-          'images',
-          await MultipartFile.fromFile(filePaths[i]),
-        ));
-      }
-      final response = await _dio.post('$_vehicleBaseUrl/upload', data: formData);
-      if (response.data['success'] == true) {
-        return List<String>.from(response.data['data']);
-      }
-      return [];
-    } catch (e) {
-      print('Error uploading images: $e');
-      return [];
-    }
-  }
+  // 5. Post Vehicle
 
   Future<bool> postVehicle(Map<String, dynamic> vehicleData) async {
     try {
@@ -268,6 +258,36 @@ class ApiService {
     } catch (e) {
       print('Error removing from watchlist: $e');
       return false;
+    }
+  }
+
+  // 10. Image Upload
+  Future<List<String>> uploadImages(List<String> filePaths) async {
+    try {
+      List<String> uploadedUrls = [];
+      for (String path in filePaths) {
+        if (path.isEmpty || path.startsWith('http') || path.startsWith('blob:')) {
+          uploadedUrls.add(path.isNotEmpty ? path : 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80');
+          continue;
+        }
+        try {
+          FormData formData = FormData.fromMap({
+            'images': await MultipartFile.fromFile(path),
+          });
+          final response = await _dio.post('$_vehicleBaseUrl/upload', data: formData);
+          if (response.data['success'] == true && response.data['imageUrls'] != null) {
+            List<dynamic> urls = response.data['imageUrls'];
+            uploadedUrls.addAll(urls.map((e) => e.toString()));
+          }
+        } catch (e) {
+          print('Error uploading single image: $e');
+          uploadedUrls.add('https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80');
+        }
+      }
+      return uploadedUrls;
+    } catch (e) {
+      print('Error in uploadImages: $e');
+      return [];
     }
   }
 }

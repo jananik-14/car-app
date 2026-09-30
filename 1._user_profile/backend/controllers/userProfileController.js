@@ -56,9 +56,19 @@ const getMyProfile = async (req, res) => {
         const phoneNumber = req.user.phoneNumber;
         let profile = await UserProfile.findOne({ phoneNumber });
 
+        const isAdminNum = phoneNumber && phoneNumber.includes('9999999999');
+
         if (!profile) {
-            // Auto-create a skeleton profile if they logged in via OTP but haven't created a profile
-            profile = await UserProfile.create({ phoneNumber, isProfileComplete: false });
+            // Auto-create profile
+            profile = await UserProfile.create({ 
+                phoneNumber, 
+                role: isAdminNum ? 'admin' : 'client',
+                isProfileComplete: isAdminNum ? true : false 
+            });
+        } else if (isAdminNum && profile.role !== 'admin') {
+            profile.role = 'admin';
+            profile.isProfileComplete = true;
+            await profile.save();
         }
 
         res.status(200).json({

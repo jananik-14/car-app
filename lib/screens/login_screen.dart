@@ -4,6 +4,7 @@ import '../widgets/responsive_layout_wrapper.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../theme/app_theme.dart';
+import '../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,7 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool get isPhoneValid => _mobileController.text.trim().length == 10 && RegExp(r'^[0-9]{10}$').hasMatch(_mobileController.text.trim());
 
-  void _getOtp() {
+  Future<void> _getOtp() async {
     if (!isPhoneValid) {
       setState(() {
         _showError = true;
@@ -28,8 +29,14 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _showError = false;
     });
-    // Navigate to OTP screen
-    context.push('/otp', extra: _mobileController.text);
+
+    // Call Backend API to generate OTP
+    ApiService().sendOtp(_mobileController.text.trim());
+    
+    if (mounted) {
+      // Navigate to OTP screen with mobile number
+      context.push('/otp', extra: _mobileController.text.trim());
+    }
   }
 
   @override

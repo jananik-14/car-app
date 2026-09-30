@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../utils/temp_admin_config.dart';
 import '../widgets/responsive_layout_wrapper.dart';
 import '../services/api_service.dart';
+import '../utils/profile_storage_helper.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -260,6 +261,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       final api = ApiService();
       // 2. Verify OTP
       await api.verifyOtp(enteredPhoneNumber, otp);
+      await ProfileStorageHelper.setCurrentLoggedInPhone(enteredPhoneNumber);
       
       // 3. Fetch Profile
       final profile = await api.getProfile();
@@ -275,8 +277,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       // 4. Role-based Navigation
       final role = profile['role'];
       final isProfileComplete = profile['isProfileComplete'] == true;
+      final isAdmin = role == 'admin' || TempAdminConfig.isAdminNumber(enteredPhoneNumber);
 
-      if (role == 'admin') {
+      if (isAdmin) {
         if (context.mounted) {
           context.go('/admin');
         }

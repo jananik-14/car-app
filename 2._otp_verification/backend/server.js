@@ -3,6 +3,8 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const activityRoutes = require('./routes/activityRoutes');
 
 // Load env vars
 dotenv.config();
@@ -12,14 +14,21 @@ connectDB();
 
 const app = express();
 
-// Body parser
-app.use(express.json ());
+// Enable CORS with preflight handling
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-internal-key']
+}));
 
-// Enable CORS
-app.use(cors());
+// Body parser
+app.use(express.json());
 
 // Mount routers
 app.use('/api/auth', authRoutes);
+app.use('/api/user', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/activity', activityRoutes);
 
 const PORT = process.env.PORT || 5000;
 

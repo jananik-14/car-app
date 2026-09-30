@@ -31,7 +31,8 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   // Step 2 State
   final TextEditingController _regNoController = TextEditingController();
 
-  // Step 3 State  final TextEditingController _kmController =
+  // Step 3 State
+  final TextEditingController _kmController =
       TextEditingController(text: '42,500');
   String _selectedOwner = '1st Owner';
   String _selectedInsuranceType = 'Comprehensive (Zero Dep)';

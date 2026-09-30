@@ -7,7 +7,7 @@ import '../theme/app_theme.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../utils/responsive_helper.dart';
 import 'package:provider/provider.dart';
-import '../providers/watchlist_provider.dart';
+import '../utils/watchlist_store.dart';
 import 'filter_sort_screen.dart';
 
 class BrowseVehiclesScreen extends StatefulWidget {
@@ -464,12 +464,13 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                 Positioned(
                   bottom: 12,
                   right: 12,
-                  child: Consumer<WatchlistProvider>(
-                    builder: (context, watchlist, child) {
-                      bool isSaved = watchlist.isSaved(vehicle['id']);
+                  child: ListenableBuilder(
+                    listenable: WatchlistStore(),
+                    builder: (context, child) {
+                      bool isSaved = WatchlistStore().isSaved(vehicle);
                       return GestureDetector(
                         onTap: () {
-                          watchlist.toggleVehicle(vehicle);
+                          WatchlistStore().toggleSave(vehicle);
                         },
                         child: Container(
                           width: 36,

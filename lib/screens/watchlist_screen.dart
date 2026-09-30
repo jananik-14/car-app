@@ -19,27 +19,14 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   final Color orange = const Color(0xFFFB7800);
 
   int _selectedTabIndex = 0;
+  final List<Map<String, dynamic>> _upcomingVehicles = [];
+  final List<Map<String, dynamic>> _closedVehicles = [];
 
-  // Dummy data arrays for other tabs
-  final List<Map<String, dynamic>> _upcomingVehicles = [
-    {
-      'id': 'u1',
-      'title': '2022 Hyundai Creta SX',
-      'specs': '2022 • Petrol • 12,500 km',
-      'status': 'Starts in 2 Days',
-      'image': 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80',
-    }
-  ];
-
-  final List<Map<String, dynamic>> _closedVehicles = [
-    {
-      'id': 'c1',
-      'title': '2020 Kia Seltos GTX+',
-      'specs': '2020 • Diesel • 45,000 km',
-      'status': 'Won for ₹14.5L',
-      'image': 'https://images.unsplash.com/photo-1632823469796-03c6214be266?auto=format&fit=crop&w=400&q=80',
-    }
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WatchlistStore().fetchFromBackend();
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -1,12 +1,19 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
 const connectDB = async () => {
+    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wheels2drive_otp_db';
     try {
-        await mongoose.connect(process.env.MONGO_URI);
-        console.log("MongoDB connected");
+        const conn = await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+        console.log(`MongoDB Connected: ${conn.connection.host}`);
     } catch (err) {
-        console.log("MongoDB connection error:", err.message);
-        process.exit(1);
+        console.error(`Atlas MongoDB connection failed (${err.message}). Attempting local fallback...`);
+        try {
+            const localUri = 'mongodb://127.0.0.1:27017/wheels2drive_otp_db';
+            const conn = await mongoose.connect(localUri);
+            console.log(`Connected to local MongoDB: ${conn.connection.host}`);
+        } catch (localErr) {
+            console.error(`Local MongoDB fallback failed: ${localErr.message}. Server will remain online.`);
+        }
     }
 };
 

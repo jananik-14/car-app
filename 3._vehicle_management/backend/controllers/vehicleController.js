@@ -1,5 +1,6 @@
 const Vehicle = require('../models/vehicleModel');
 const axios = require('axios');
+const { logActivity } = require('../utils/activityLogger');
 // @desc    Create a new vehicle (starts as "pending")
 // @route   POST /api/vehicle/post
 // @access  Public
@@ -38,7 +39,7 @@ const createVehicle = async (req, res) => {
             fineAmount: 0
         });
 
-        // Trigger Notification to Admin logic here
+        // Trigger Notification & Activity Log
         try {
             await axios.post('http://localhost:5004/api/notifications/create', {
                 recipientPhoneNumber: 'admin',
@@ -46,8 +47,9 @@ const createVehicle = async (req, res) => {
                 body: `A new vehicle (${registrationNumber}) has been submitted for approval by ${ownerPhoneNumber}.`,
                 type: 'info'
             });
+            await logActivity(ownerPhoneNumber, 'post_vehicle', { vehicleId: vehicle._id, registrationNumber });
         } catch (err) {
-            console.error('Failed to send notification to admin:', err.message);
+            console.error('Failed to send notification/activity log:', err.message);
         }
 
         res.status(201).json({

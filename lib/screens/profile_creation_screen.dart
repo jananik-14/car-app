@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../utils/profile_storage_helper.dart';
 import '../widgets/profile_form_fields.dart';
+import '../services/auth_service.dart';
 
 class ProfileCreationScreen extends StatefulWidget {
   const ProfileCreationScreen({super.key});
@@ -63,8 +64,7 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
   Future<void> _saveAndContinue() async {
     if (!_isFormValid) return;
 
-    final phone = await ProfileStorageHelper.getCurrentLoggedInPhone();
-    if (phone == null) return; // Fallback, shouldn't happen
+    final phone = await ProfileStorageHelper.getCurrentLoggedInPhone() ?? AuthService.phoneNumber ?? 'default_user';
 
     await ProfileStorageHelper.saveProfileField(phone, 'user_name', _nameController.text.trim());
     await ProfileStorageHelper.saveProfileField(phone, 'user_email', _emailController.text.trim());
