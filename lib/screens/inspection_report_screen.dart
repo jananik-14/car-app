@@ -1,13 +1,16 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 class InspectionReportScreen extends StatelessWidget {
   final String vehicleId;
+  final Uint8List? pdfBytes;
 
-  const InspectionReportScreen({super.key, required this.vehicleId});
+  const InspectionReportScreen({super.key, required this.vehicleId, this.pdfBytes});
 
   static const Color navyBlue = Color(0xFF001128);
   static const Color orange = Color(0xFFFB7800);
@@ -78,6 +81,11 @@ class InspectionReportScreen extends StatelessWidget {
   }
 
   Widget _buildBody(BuildContext context) {
+    if (pdfBytes != null) {
+      // TODO: Fetch this PDF from backend API later
+      return SfPdfViewer.memory(pdfBytes!);
+    }
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

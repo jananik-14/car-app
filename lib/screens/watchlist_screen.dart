@@ -27,6 +27,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       'title': '2022 Hyundai Creta SX',
       'specs': '2022 • Petrol • 12,500 km',
       'status': 'Starts in 2 Days',
+      'city': 'Chennai',
       'image': 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80',
     }
   ];
@@ -37,6 +38,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       'title': '2020 Kia Seltos GTX+',
       'specs': '2020 • Diesel • 45,000 km',
       'status': 'Won for ₹14.5L',
+      'city': 'Pune',
       'image': 'https://images.unsplash.com/photo-1632823469796-03c6214be266?auto=format&fit=crop&w=400&q=80',
     }
   ];
@@ -348,10 +350,15 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                       child: Icon(Icons.star, color: orange, size: 16),
                     ),
                     const SizedBox(width: 8),
-                    CircleAvatar(
-                      backgroundColor: Colors.white,
-                      radius: 16,
-                      child: Icon(Icons.favorite, color: Colors.red, size: 16),
+                    GestureDetector(
+                      onTap: () {
+                        WatchlistStore().toggleSave(vehicle);
+                      },
+                      child: const CircleAvatar(
+                        backgroundColor: Colors.white,
+                        radius: 16,
+                        child: Icon(Icons.favorite, color: Colors.red, size: 16),
+                      ),
                     ),
                   ],
                 ),
@@ -393,6 +400,17 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)),
                       child: Text('Turbo Petrol', style: TextStyle(color: Colors.blue.shade700, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      vehicle['city'] ?? 'Unknown Location',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -503,10 +521,15 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
               Positioned(
                 top: 12,
                 right: 12,
-                child: CircleAvatar(
-                  backgroundColor: Colors.white,
-                  radius: 16,
-                  child: Icon(Icons.favorite, color: Colors.red, size: 16),
+                child: GestureDetector(
+                  onTap: () {
+                    WatchlistStore().toggleSave(vehicle);
+                  },
+                  child: const CircleAvatar(
+                    backgroundColor: Colors.white,
+                    radius: 16,
+                    child: Icon(Icons.favorite, color: Colors.red, size: 16),
+                  ),
                 ),
               ),
               Positioned(
@@ -552,6 +575,17 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                           Text('140-Pt Certified', style: TextStyle(color: Colors.green.shade700, fontSize: 10, fontWeight: FontWeight.bold)),
                         ],
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      vehicle['city'] ?? 'Unknown Location',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -677,6 +711,17 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   vehicle['title'],
                   style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      vehicle['city'] ?? 'Unknown Location',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
@@ -746,6 +791,17 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                 Text(
                   vehicle['title'],
                   style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      vehicle['city'] ?? 'Unknown Location',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Text(

@@ -14,10 +14,15 @@ dependencies:
   dio: ^5.4.2
   google_fonts: ^6.2.1
   cupertino_icons: ^1.0.6
-  share_plus: ^13.3.0
+  share_plus: any
   image_picker: ^1.2.3
   shared_preferences: ^2.5.5
   intl: ^0.20.3
+  file_picker: ^8.1.4
+  syncfusion_flutter_pdfviewer: any
+  qr_flutter: 4.1.0
+  url_launcher: ^6.2.6
+  razorpay_flutter: ^1.4.7
 
 dev_dependencies:
   flutter_test:

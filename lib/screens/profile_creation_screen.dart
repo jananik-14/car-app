@@ -5,7 +5,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../utils/profile_storage_helper.dart';
+import '../services/admin_notification_store.dart';
 import '../widgets/profile_form_fields.dart';
+import '../widgets/kyc_upload_field.dart';
+import '../services/auth_service.dart';
 
 class ProfileCreationScreen extends StatefulWidget {
   const ProfileCreationScreen({super.key});
@@ -22,6 +25,8 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
   
   XFile? _profileImage;
   Uint8List? _profileImageBytes;
+  XFile? _kycDocumentImage;
+  Uint8List? _kycDocumentBytes;
   bool _isFormValid = false;
   String? _errorMessage;
 
@@ -47,6 +52,9 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
     } else if (_cityController.text.trim().isEmpty) {
       isValid = false;
       error = 'City / Location is required.';
+    } else if (_kycDocumentImage == null) {
+      isValid = false;
+      error = 'KYC document is required.';
     }
 
     setState(() {
@@ -63,7 +71,7 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
   Future<void> _saveAndContinue() async {
     if (!_isFormValid) return;
 
-    final phone = await ProfileStorageHelper.getCurrentLoggedInPhone();
+    final phone = AuthService().currentPhone;
     if (phone == null) return; // Fallback, shouldn't happen
 
     await ProfileStorageHelper.saveProfileField(phone, 'user_name', _nameController.text.trim());
@@ -72,7 +80,14 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
     await ProfileStorageHelper.saveProfileField(phone, 'user_dob', _dobController.text.trim());
     await ProfileStorageHelper.setProfileComplete(phone);
     
+    if (_kycDocumentImage != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('kyc_uploaded_$phone', true);
+    }
+    
     if (mounted) {
+      final fullName = _nameController.text.trim();
+      AdminNotificationStore().addNotification('New client registered: $fullName', 'client');
       context.go('/terms');
     }
   }
@@ -103,8 +118,14 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Image.asset('assets/images/logo.png', height: 48),
               const SizedBox(height: 16),
+              Image.asset(
+                'assets/images/logo.png', 
+                height: 160, 
+                width: 160, 
+                fit: BoxFit.contain
+              ),
+              const SizedBox(height: 32),
               const Text(
                 'One Last Step!',
                 style: TextStyle(
@@ -134,6 +155,15 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
                   _profileImageBytes = bytes;
                 },
                 onChanged: _validateForm,
+              ),
+              
+              const SizedBox(height: 24),
+              KycUploadField(
+                onChanged: (file, bytes) {
+                  _kycDocumentImage = file;
+                  _kycDocumentBytes = bytes;
+                  _validateForm();
+                },
               ),
               
               if (_errorMessage != null) ...[

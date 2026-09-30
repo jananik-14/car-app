@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:go_router/go_router.dart';
 import '../screens/login_screen.dart';
 import '../screens/profile_creation_screen.dart';
@@ -22,12 +23,39 @@ import '../screens/debug_menu_screen.dart';
 import '../screens/my_activity_screen.dart';
 import '../screens/profile_edit_screen.dart';
 import '../screens/help_support_screen.dart';
+import '../screens/payment_screen.dart';
+import '../screens/subscription_checkout_screen.dart';
 
 import '../services/auth_service.dart';
+import '../utils/temp_admin_config.dart';
 
 class AppRouter {
   static final router = GoRouter(
     initialLocation: '/login',
+    refreshListenable: AuthService(),
+    redirect: (context, state) {
+      final loggedIn = AuthService().isLoggedIn;
+      final location = state.uri.path;
+      print('LOGOUT DEBUG: redirect location=$location loggedIn=$loggedIn');
+
+      final isAuthRoute = location == '/login' || location == '/otp';
+
+      if (!loggedIn && !isAuthRoute) {
+        print('AUTH DEBUG: redirect location=$location loggedIn=$loggedIn -> /login');
+        return '/login';
+      }
+
+      if (loggedIn && location == '/login') {
+        final phone = AuthService().currentPhone ?? '';
+        final isAdmin = TempAdminConfig.isAdminNumber(phone);
+        final target = isAdmin ? '/admin' : '/browse';
+        print('AUTH DEBUG: redirect location=$location loggedIn=$loggedIn -> $target');
+        return target; 
+      }
+
+      print('AUTH DEBUG: redirect location=$location loggedIn=$loggedIn -> null');
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/login',
@@ -67,7 +95,8 @@ class AppRouter {
         path: '/inspection/:id',
         builder: (context, state) {
           final id = state.pathParameters['id']!;
-          return InspectionReportScreen(vehicleId: id);
+          final pdfBytes = state.extra as Uint8List?;
+          return InspectionReportScreen(vehicleId: id, pdfBytes: pdfBytes);
         },
       ),
       GoRoute(
@@ -87,7 +116,17 @@ class AppRouter {
       ),
       GoRoute(
         path: '/admin-approval',
-        builder: (context, state) => const AdminApprovalCenterScreen(),
+        builder: (context, state) {
+          final categoryStr = state.uri.queryParameters['category'];
+          final highlightId = state.uri.queryParameters['highlightId'];
+          
+          MainCategory? initialCategory;
+          if (categoryStr == 'bidding') initialCategory = MainCategory.bidding;
+          if (categoryStr == 'subscriptions') initialCategory = MainCategory.subscriptions;
+          if (categoryStr == 'vehiclePosts') initialCategory = MainCategory.vehiclePosts;
+
+          return AdminApprovalCenterScreen(initialCategory: initialCategory, highlightId: highlightId);
+        },
       ),
       GoRoute(
         path: '/admin/post-management',
@@ -114,6 +153,13 @@ class AppRouter {
         builder: (context, state) => const SubscriptionPlansScreen(),
       ),
       GoRoute(
+        path: '/subscription_checkout',
+        builder: (context, state) {
+          final planId = state.uri.queryParameters['planId'] ?? 'monthly';
+          return SubscriptionCheckoutScreen(planId: planId);
+        },
+      ),
+      GoRoute(
         path: '/email/:plan',
         builder: (context, state) {
           final plan = state.pathParameters['plan'] ?? '';
@@ -135,6 +181,18 @@ class AppRouter {
       GoRoute(
         path: '/help_support',
         builder: (context, state) => const HelpSupportScreen(),
+      ),
+      GoRoute(
+        path: '/payment',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return PaymentScreen(
+            title: extra['title'] ?? 'Vehicle',
+            image: extra['image'] ?? 'assets/images/placeholder.png',
+            amount: extra['amount'] ?? 0,
+            seller: extra['seller'] ?? 'Unknown',
+          );
+        },
       ),
     ],
   );

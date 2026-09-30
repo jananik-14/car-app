@@ -7,6 +7,12 @@ import 'package:share_plus/share_plus.dart';
 import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
+import '../services/admin_notification_store.dart';
+import '../utils/local_listings_store.dart';
+import '../services/subscription_store.dart';
+import '../utils/profile_storage_helper.dart';
+import '../services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum BidValidationState { empty, valid, invalid }
 
@@ -88,15 +94,17 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   void _incrementOffer(int amount) {
-    setState(() {
-      int baseAmount = offerAmount;
-      if (offerAmount == 0) {
-        final entered =
-            int.tryParse(_offerController.text.replaceAll(',', '')) ?? 0;
-        baseAmount = entered > 0 ? entered : currentBid;
-      }
-      offerAmount = baseAmount + amount;
-      _offerController.text = _formatCurrency(offerAmount);
+    _checkSubscriptionAndProceed(() {
+      setState(() {
+        int baseAmount = offerAmount;
+        if (offerAmount == 0) {
+          final entered =
+              int.tryParse(_offerController.text.replaceAll(',', '')) ?? 0;
+          baseAmount = entered > 0 ? entered : currentBid;
+        }
+        offerAmount = baseAmount + amount;
+        _offerController.text = _formatCurrency(offerAmount);
+      });
     });
   }
 
@@ -111,6 +119,73 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         offerAmount = 0;
       });
     }
+  }
+
+  void _checkSubscriptionAndProceed(VoidCallback onProceed) {
+    final store = SubscriptionStore();
+    if (store.isActive) {
+      onProceed();
+    } else {
+      _showSubscriptionRequiredSheet(store.isPending);
+    }
+  }
+
+  void _showSubscriptionRequiredSheet(bool isPending) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_outline, size: 48, color: Color(0xFFFB7800)),
+            const SizedBox(height: 16),
+            const Text('Subscription required',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF001128))),
+            const SizedBox(height: 8),
+            Text(
+              isPending
+                  ? 'Your subscription is pending approval.'
+                  : 'Subscribe to place bids on live auctions',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  context.push('/subscription');
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFB7800),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('View Plans',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel',
+                  style: TextStyle(color: Colors.grey, fontSize: 16)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Map<String, dynamic> get _vehicleData =>
@@ -715,7 +790,42 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                       child: ElevatedButton(
                         onPressed: (bidState == BidValidationState.valid)
                             ? () {
-                                context.push('/confirmation/bid');
+                                _checkSubscriptionAndProceed(() async {
+                                  final bidAmount = _offerController.text;
+                                  final title =
+                                      _vehicleData['title'] ?? 'Vehicle';
+                                  final bidId =
+                                      'b_new_${DateTime.now().millisecondsSinceEpoch}';
+
+                                  final phoneStr = AuthService().currentPhone;
+                                  final normalizedPhone = ProfileStorageHelper.normalizePhone(phoneStr!);
+                                  final prefs = await SharedPreferences.getInstance();
+                                  final realName = prefs.getString('user_name_$normalizedPhone') ?? 'Current User';
+
+                                  LocalListingsStore().addPendingBid({
+                                    'id': bidId,
+                                    'auctionId':
+                                        'A-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+                                    'title': title,
+                                    'bidAmount': '₹$bidAmount',
+                                    'timeAgo': 'Just now',
+                                    'bidderName': realName,
+                                    'bidderUsername': phoneStr,
+                                    'dealerId': 'D-1234',
+                                    'depositPaid': true,
+                                    'depositAmount': '₹10,000',
+                                    'escrow': 'Secured',
+                                    'score': '4.5 / 5.0',
+                                  });
+
+                                  AdminNotificationStore().addNotification(
+                                      'New bid placed: ₹$bidAmount on $title by $realName',
+                                      'bid',
+                                      relatedItemId: bidId);
+                                  if (mounted) {
+                                    context.push('/confirmation/bid');
+                                  }
+                                });
                               }
                             : null,
                         style: ElevatedButton.styleFrom(

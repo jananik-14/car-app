@@ -6,25 +6,37 @@
 // PATCH /api/admin/bids/:id (accept/reject)
 // PATCH /api/admin/subscriptions/:id (approve/reject)
 
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../widgets/admin_navigation_drawer.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../utils/global_store.dart';
 import '../widgets/admin_app_bar.dart';
+import '../utils/local_listings_store.dart';
+import '../services/subscription_store.dart';
+import '../services/client_notification_store.dart';
+import '../config/subscription_plans.dart';
 
-enum MainCategory { vehiclePosts, bidding, subscriptions }
+enum MainCategory { vehiclePosts, bidding, subscriptions, payments }
+
 enum SubState { pending, accepted, rejected }
 
 class AdminApprovalCenterScreen extends StatefulWidget {
-  const AdminApprovalCenterScreen({super.key});
+  final MainCategory? initialCategory;
+  final String? highlightId;
+
+  const AdminApprovalCenterScreen(
+      {super.key, this.initialCategory, this.highlightId});
 
   @override
-  State<AdminApprovalCenterScreen> createState() => _AdminApprovalCenterScreenState();
+  State<AdminApprovalCenterScreen> createState() =>
+      _AdminApprovalCenterScreenState();
 }
 
 class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
-  MainCategory _selectedCategory = MainCategory.vehiclePosts;
+  late MainCategory _selectedCategory;
   SubState _selectedSubState = SubState.pending;
 
   final Color _navy = const Color(0xFF001128);
@@ -33,235 +45,217 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   final Color _red = const Color(0xFFEF4444);
 
   // --- Dummy Data ---
-  List<Map<String, dynamic>> pendingVehicles = [
-    {
-      'id': 'v1',
-      'title': '2023 Tesla Model Y',
-      'price': '₹55.0 L',
-      'tag': 'Long Range',
-      'sellerName': 'Ravi Sharma',
-      'location': 'Mumbai',
-      'stateCode': 'MH-01',
-      'timeAgo': '2 hours ago',
-      'type': 'Verified Seller',
-      'rcStatus': 'Clear',
-      'inspection': '4.9 / 5.0',
-      'imageUrl': 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=300&q=80',
-    },
-    {
-      'id': 'v2',
-      'title': '2022 BMW 530i M-Sport',
-      'price': '₹48.5 L',
-      'tag': null,
-      'sellerName': 'Amit Kumar',
-      'location': 'Delhi',
-      'stateCode': 'DL-01',
-      'timeAgo': '5 hours ago',
-      'type': 'Dealer',
-      'rcStatus': 'Pending',
-      'inspection': '4.5 / 5.0',
-      'imageUrl': 'https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=300&q=80',
-    },
-    {
-      'id': 'v3',
-      'title': '2021 Mahindra Thar 4x4',
-      'price': '₹15.2 L',
-      'tag': 'Diesel MT',
-      'sellerName': 'Rahul Verma',
-      'location': 'Pune',
-      'stateCode': 'MH-12',
-      'timeAgo': '1 day ago',
-      'type': 'Private',
-      'rcStatus': 'Clear',
-      'inspection': '4.2 / 5.0',
-      'imageUrl': 'https://images.unsplash.com/photo-1620025792945-31ce1d94fc8b?auto=format&fit=crop&w=300&q=80',
-    },
-  ];
 
-  List<Map<String, dynamic>> acceptedVehicles = [
-    {
-      'id': 'v4',
-      'title': '2021 Hyundai Creta SX(O)',
-      'price': '₹16.5 L',
-      'sellerName': 'Priya Singh',
-      'ref': 'V-9982',
-      'time': 'Approved 2 days ago',
-    },
-  ];
 
-  List<Map<String, dynamic>> rejectedVehicles = [
-    {
-      'id': 'v5',
-      'title': '2019 Maruti Swift ZDi',
-      'sellerName': 'Karan Mehta',
-      'reason': 'Blurry RC scan',
-      'time': 'Declined 3 days ago',
-    },
-  ];
 
-  List<Map<String, dynamic>> pendingBids = [
-    {
-      'id': 'b1',
-      'auctionId': 'A-108',
-      'title': '2022 BMW 5 Series 530i',
-      'bidAmount': '₹48,50,000',
-      'timeAgo': 'Just now',
-      'bidderName': 'Vikram Rathore',
-      'bidderUsername': 'vikram_r',
-      'dealerId': 'D-4091',
-      'depositPaid': true,
-      'depositAmount': '₹50,000',
-      'escrow': 'Secured',
-      'score': '4.8 / 5.0',
-    },
-    {
-      'id': 'b2',
-      'auctionId': 'A-112',
-      'title': '2023 Ford Bronco Wildtrak',
-      'bidAmount': '₹62,00,000',
-      'timeAgo': '15 mins ago',
-      'bidderName': 'Sneha Patel',
-      'bidderUsername': 'sneha_p',
-      'dealerId': 'D-3082',
-      'depositPaid': true,
-      'depositAmount': '₹1,00,000',
-      'escrow': 'Secured',
-      'score': '4.9 / 5.0',
-    },
-  ];
-
-  List<Map<String, dynamic>> acceptedBids = [
-    {
-      'id': 'b3',
-      'title': '2020 Audi A4 Technology',
-      'price': '₹32.5 L',
-      'bidderName': 'Rohan Shah',
-      'ref': 'BID-1004',
-      'time': 'Accepted yesterday',
-    },
-  ];
-
-  List<Map<String, dynamic>> rejectedBids = [
-    {
-      'id': 'b4',
-      'title': '2021 Jeep Compass Limited',
-      'price': '₹21.0 L',
-      'bidderName': 'Ankit Rao',
-      'reason': 'Under-deposit',
-      'time': 'Declined 2 days ago',
-    },
-  ];
-
-  late List<Map<String, dynamic>> pendingSubscriptions;
 
   @override
   void initState() {
     super.initState();
-    pendingSubscriptions = [
-      ...GlobalStore.pendingSubscriptions,
-      {
-        'id': 's1',
-        'businessName': 'Apex Motors Ltd',
-        'tier': 'Pro Trader',
-        'tierColor': Colors.purple,
-        'id1Label': 'GSTIN',
-        'id1Value': '27AADCA1234F1Z5',
-        'id2Label': 'User ID',
-        'id2Value': 'U-8821',
-        'timeAgo': '45 mins ago',
-        'price': '₹1,999/mo',
-        'payRef': 'UPI-90823412',
-        'paymentStatus': 'Verified',
-        'gstStatus': 'Active',
-      },
-      {
-        'id': 's2',
-        'businessName': 'Kavita Autolink',
-        'tier': 'Elite Dealer',
-        'tierColor': Colors.blue,
-        'id1Label': 'Business ID',
-        'id1Value': 'B-9923',
-        'id2Label': 'Dealer ID',
-        'id2Value': 'D-2211',
-        'timeAgo': '2 hours ago',
-        'price': '₹4,999/mo',
-        'payRef': 'NEFT-883921',
-        'paymentStatus': 'Cleared',
-        'gstStatus': 'Pending',
-        'kycDocs': 'Attached',
-      },
-    ];
+    _selectedCategory = widget.initialCategory ?? MainCategory.vehiclePosts;
   }
 
-  List<Map<String, dynamic>> acceptedSubscriptions = [
-    {
-      'id': 's3',
-      'businessName': 'Metro Car Hub',
-      'tier': 'Starter Dealer',
-      'price': '₹999/mo',
-      'id1Label': 'GSTIN',
-      'id1Value': '27BBVCA9988C1Z2',
-      'ref': 'SUB-1992',
-      'time': 'Approved yesterday',
-    },
-  ];
+  int get totalPendingCount =>
+      LocalListingsStore().pendingListings.length +
+      LocalListingsStore().pendingBids.length +
+      LocalListingsStore().pendingSubscriptions.length +
+      LocalListingsStore()
+          .pendingPayments
+          .where((p) => p['status'] != 'PAID')
+          .length;
 
-  List<Map<String, dynamic>> rejectedSubscriptions = [
-    {
-      'id': 's4',
-      'businessName': 'Royal Wheels Agency',
-      'tier': 'Pro Trader',
-      'dealerName': 'Rajiv Khanna',
-      'reason': 'Invalid GSTIN',
-      'time': 'Declined 2 days ago',
-    },
-  ];
+  void _showDocumentViewerPlaceholder(String? imagePath) {
+    if (imagePath != null && imagePath.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          child: Stack(
+            children: [
+              InteractiveViewer(
+                child: Image.file(File(imagePath), fit: BoxFit.contain),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.black, size: 30),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No document/screenshot attached.')),
+      );
+    }
+  }
 
-  int get totalPendingCount => pendingVehicles.length + pendingBids.length + pendingSubscriptions.length;
-
-  void _showDocumentViewerPlaceholder() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Document viewer coming soon')),
+  void _showConfirmationDialog(
+      {required String title,
+      required String content,
+      required VoidCallback onConfirm}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _orange, foregroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(ctx);
+              onConfirm();
+            },
+            child: const Text('Yes, Confirm'),
+          ),
+        ],
+      ),
     );
   }
 
   void _handleApprove(String id, MainCategory category) {
     setState(() {
       if (category == MainCategory.vehiclePosts) {
-        final item = pendingVehicles.firstWhere((e) => e['id'] == id);
-        pendingVehicles.remove(item);
-        acceptedVehicles.insert(0, {
-          'id': item['id'],
-          'title': item['title'],
-          'price': item['price'],
-          'sellerName': item['sellerName'],
-          'ref': 'V-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-          'time': 'Approved just now',
-        });
+        final idx = LocalListingsStore().pendingListings.indexWhere((e) => e['id'] == id);
+        if (idx != -1) {
+          final item = LocalListingsStore().pendingListings.removeAt(idx);
+          LocalListingsStore().acceptedListings.insert(0, {
+            'id': item['id'],
+            'title': item['title'],
+            'price': item['price'],
+            'sellerName': item['sellerName'],
+            'ref':
+                'V-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+            'time': 'Approved just now',
+          });
+          final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your listing "${item['title']}" was approved and is now live.',
+            'listing_approved',
+            sellerPhone,
+          );
+        } else {
+          final item = LocalListingsStore()
+              .pendingListings
+              .firstWhere((e) => e['id'] == id);
+          LocalListingsStore().acceptListing({
+            ...item,
+            'ref':
+                'V-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+            'time': 'Approved just now',
+          });
+          final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your listing "${item['title']}" has been approved and is now live!',
+            'listing_approved',
+            sellerPhone,
+          );
+        }
       } else if (category == MainCategory.bidding) {
-        final item = pendingBids.firstWhere((e) => e['id'] == id);
-        pendingBids.remove(item);
-        acceptedBids.insert(0, {
-          'id': item['id'],
-          'title': item['title'],
-          'price': item['bidAmount'], // approximation
-          'bidderName': item['bidderName'],
-          'ref': 'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-          'time': 'Accepted just now',
-        });
+        final idx = LocalListingsStore().pendingBids.indexWhere((e) => e['id'] == id);
+        if (idx != -1) {
+          final item = LocalListingsStore().pendingBids.removeAt(idx);
+          LocalListingsStore().acceptedBids.insert(0, {
+            'id': item['id'],
+            'title': item['title'],
+            'price': item['bidAmount'], // approximation
+            'bidderName': item['bidderName'],
+            'ref':
+                'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+            'time': 'Accepted just now',
+          });
+          final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your bid on "${item['title']}" was accepted!',
+            'bid_accepted',
+            bidderPhone,
+          );
+        } else {
+          final item =
+              LocalListingsStore().pendingBids.firstWhere((e) => e['id'] == id);
+          LocalListingsStore().acceptBid({
+            ...item,
+            'ref':
+                'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+            'time': 'Accepted just now',
+          });
+          final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your bid on "${item['title']}" was accepted!',
+            'bid_accepted',
+            bidderPhone,
+          );
+        }
       } else if (category == MainCategory.subscriptions) {
-        final item = pendingSubscriptions.firstWhere((e) => e['id'] == id);
-        pendingSubscriptions.remove(item);
-        acceptedSubscriptions.insert(0, {
-          'id': item['id'],
-          'businessName': item['businessName'],
-          'tier': item['tier'],
-          'price': item['price'],
-          'id1Label': item['id1Label'],
-          'id1Value': item['id1Value'],
-          'ref': 'SUB-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-          'time': 'Approved just now',
-        });
+        final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
+        if (idx != -1) {
+          final item = LocalListingsStore().pendingSubscriptions.removeAt(idx);
+          if (item['phone'] != null && item['planId'] != null) {
+            SubscriptionStore().activate(item['phone'], item['planId']);
+          }
+          LocalListingsStore().acceptedSubscriptions.insert(0, {
+            'id': item['id'],
+            'businessName': item['businessName'],
+            'tier': item['tier'],
+            'price': item['price'],
+            'id1Label': item['id1Label'],
+            'id1Value': item['id1Value'],
+            'ref':
+                'SUB-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+            'time': 'Approved just now',
+          });
+          final requesterPhone = item['phone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your ${item['tier']} subscription is now active!',
+            'subscription_approved',
+            requesterPhone,
+          );
+        } else {
+          final item = LocalListingsStore().pendingSubscriptions
+              .firstWhere((e) => e['id'] == id);
+          if (item['phone'] != null && item['planId'] != null) {
+            SubscriptionStore().activate(item['phone'], item['planId']);
+          }
+          LocalListingsStore().acceptSubscription({
+            ...item,
+            'ref':
+                'SUB-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+            'time': 'Approved just now',
+          });
+          final requesterPhone = item['phone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your ${item['tier']} subscription is now active! Valid until 1 Year.',
+            'subscription_approved',
+            requesterPhone,
+          );
+        }
+      } else if (category == MainCategory.payments) {
+        final item = LocalListingsStore()
+            .pendingPayments
+            .firstWhere((e) => e['id'] == id);
+        if (item['type'] == 'token') {
+          LocalListingsStore().updatePaymentStatus(id, 'TOKEN CONFIRMED');
+          final buyerPhone = item['phone'] ?? item['buyerPhone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your payment of ₹${item['amount']} has been confirmed.',
+            'payment_confirmed',
+            buyerPhone,
+          );
+        } else {
+          LocalListingsStore().updatePaymentStatus(id, 'PAID');
+          final buyerPhone = item['phone'] ?? item['buyerPhone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your payment of ₹${item['amount']} has been confirmed.',
+            'payment_confirmed',
+            buyerPhone,
+          );
+        }
       }
     });
 
@@ -269,7 +263,9 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         ? "Vehicle published successfully"
         : category == MainCategory.bidding
             ? "Bid accepted"
-            : "Subscription approved";
+            : category == MainCategory.payments
+                ? "Payment confirmed"
+                : "Subscription approved";
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
@@ -289,12 +285,19 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           maxLines: 2,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _red, foregroundColor: Colors.white),
             onPressed: () {
               Navigator.pop(ctx);
-              _processRejection(id, category, reasonController.text.isEmpty ? 'Admin rejected' : reasonController.text);
+              _processRejection(
+                  id,
+                  category,
+                  reasonController.text.isEmpty
+                      ? 'Admin rejected'
+                      : reasonController.text);
             },
             child: const Text('Reject'),
           ),
@@ -306,37 +309,120 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   void _processRejection(String id, MainCategory category, String reason) {
     setState(() {
       if (category == MainCategory.vehiclePosts) {
-        final item = pendingVehicles.firstWhere((e) => e['id'] == id);
-        pendingVehicles.remove(item);
-        rejectedVehicles.insert(0, {
-          'id': item['id'],
-          'title': item['title'],
-          'sellerName': item['sellerName'],
-          'reason': reason,
-          'time': 'Declined just now',
-        });
+        final idx = LocalListingsStore().pendingListings.indexWhere((e) => e['id'] == id);
+        if (idx != -1) {
+          final item = LocalListingsStore().pendingListings.removeAt(idx);
+          LocalListingsStore().rejectedListings.insert(0, {
+            'id': item['id'],
+            'title': item['title'],
+            'sellerName': item['sellerName'],
+            'reason': reason,
+            'time': 'Declined just now',
+          });
+          final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your listing "${item['title']}" was rejected. Reason: $reason',
+            'listing_rejected',
+            sellerPhone,
+          );
+        } else {
+          final item = LocalListingsStore()
+              .pendingListings
+              .firstWhere((e) => e['id'] == id);
+          LocalListingsStore().rejectListing({
+            ...item,
+            'reason': reason,
+            'time': 'Declined just now',
+          });
+          final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your listing "${item['title']}" was rejected. Reason: $reason',
+            'listing_rejected',
+            sellerPhone,
+          );
+        }
       } else if (category == MainCategory.bidding) {
-        final item = pendingBids.firstWhere((e) => e['id'] == id);
-        pendingBids.remove(item);
-        rejectedBids.insert(0, {
-          'id': item['id'],
-          'title': item['title'],
-          'price': item['bidAmount'],
-          'bidderName': item['bidderName'],
-          'reason': reason,
-          'time': 'Declined just now',
-        });
+        final idx = LocalListingsStore().pendingBids.indexWhere((e) => e['id'] == id);
+        if (idx != -1) {
+          final item = LocalListingsStore().pendingBids.removeAt(idx);
+          LocalListingsStore().rejectedBids.insert(0, {
+            'id': item['id'],
+            'title': item['title'],
+            'price': item['bidAmount'],
+            'bidderName': item['bidderName'],
+            'reason': reason,
+            'time': 'Declined just now',
+          });
+          final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your bid on "${item['title']}" was not accepted.',
+            'bid_rejected',
+            bidderPhone,
+          );
+        } else {
+          final item =
+              LocalListingsStore().pendingBids.firstWhere((e) => e['id'] == id);
+          LocalListingsStore().rejectBid({
+            ...item,
+            'reason': reason,
+            'time': 'Declined just now',
+          });
+          final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your bid on "${item['title']}" was not accepted.',
+            'bid_rejected',
+            bidderPhone,
+          );
+        }
       } else if (category == MainCategory.subscriptions) {
-        final item = pendingSubscriptions.firstWhere((e) => e['id'] == id);
-        pendingSubscriptions.remove(item);
-        rejectedSubscriptions.insert(0, {
-          'id': item['id'],
-          'businessName': item['businessName'],
-          'tier': item['tier'],
-          'dealerName': 'Dealer',
-          'reason': reason,
-          'time': 'Declined just now',
-        });
+        final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
+        if (idx != -1) {
+          final item = LocalListingsStore().pendingSubscriptions.removeAt(idx);
+          if (item['phone'] != null) {
+            SubscriptionStore().reject(item['phone']);
+          }
+          LocalListingsStore().rejectedSubscriptions.insert(0, {
+            'id': item['id'],
+            'businessName': item['businessName'],
+            'tier': item['tier'],
+            'dealerName': 'Dealer',
+            'reason': reason,
+            'time': 'Declined just now',
+          });
+          final requesterPhone = item['phone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your subscription request was declined. Reason: $reason',
+            'subscription_rejected',
+            requesterPhone,
+          );
+        } else {
+          final item = LocalListingsStore().pendingSubscriptions
+              .firstWhere((e) => e['id'] == id);
+          if (item['phone'] != null) {
+            SubscriptionStore().reject(item['phone']);
+          }
+          LocalListingsStore().rejectSubscription({
+            ...item,
+            'dealerName': item['dealerName'] ?? 'Dealer',
+            'reason': reason,
+            'time': 'Declined just now',
+          });
+          final requesterPhone = item['phone'] ?? '';
+          ClientNotificationStore().addNotification(
+            'Your subscription request was declined. Reason: $reason',
+            'subscription_rejected',
+            requesterPhone,
+          );
+        }
+      } else if (category == MainCategory.payments) {
+        LocalListingsStore().updatePaymentStatus(id, 'PAYMENT REJECTED');
+        final item = LocalListingsStore().pendingPayments.firstWhere((e) => e['id'] == id);
+        final buyerPhone = item['phone'] ?? item['buyerPhone'] ?? '';
+        ClientNotificationStore().addNotification(
+          'Your payment of ₹${item['amount'] ?? ''} was rejected. Reason: $reason',
+          'payment_rejected',
+          buyerPhone,
+        );
       }
     });
   }
@@ -349,14 +435,18 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
       backgroundColor: const Color(0xFFF3F4F6),
       drawer: const AdminNavigationDrawer(),
       appBar: const AdminAppBar(),
-      body: Column(
-        children: [
-          _buildHeaderSection(),
-          _buildMainCategoryTabs(),
-          _buildSubStateTabs(),
-          Expanded(child: _buildContentArea()),
-        ],
-      ),
+      body: ListenableBuilder(
+          listenable: LocalListingsStore(),
+          builder: (context, _) {
+            return Column(
+              children: [
+                _buildHeaderSection(),
+                _buildMainCategoryTabs(),
+                _buildSubStateTabs(),
+                Expanded(child: _buildContentArea()),
+              ],
+            );
+          }),
     );
   }
 
@@ -372,7 +462,8 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             children: [
               Text(
                 'Approval Center',
-                style: TextStyle(color: _navy, fontSize: 20, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: _navy, fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
@@ -389,7 +480,10 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             ),
             child: Text(
               '$totalPendingCount Pending',
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -408,11 +502,32 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildMainCategoryTab(MainCategory.vehiclePosts, Icons.directions_car, 'Vehicle Posts', pendingVehicles.length),
+              _buildMainCategoryTab(
+                  MainCategory.vehiclePosts,
+                  Icons.directions_car,
+                  'Vehicle Posts',
+                  LocalListingsStore().pendingListings.length),
               const SizedBox(width: 12),
-              _buildMainCategoryTab(MainCategory.bidding, Icons.gavel, 'Bidding', pendingBids.length),
+              _buildMainCategoryTab(
+                  MainCategory.bidding,
+                  Icons.gavel,
+                  'Bidding',
+                  LocalListingsStore().pendingBids.length),
               const SizedBox(width: 12),
-              _buildMainCategoryTab(MainCategory.subscriptions, Icons.subscriptions, 'Subscriptions', pendingSubscriptions.length),
+              _buildMainCategoryTab(
+                  MainCategory.subscriptions,
+                  Icons.subscriptions,
+                  'Subscriptions',
+                  LocalListingsStore().pendingSubscriptions.length),
+              const SizedBox(width: 12),
+              _buildMainCategoryTab(
+                  MainCategory.payments,
+                  Icons.payment,
+                  'Payments',
+                  LocalListingsStore()
+                      .pendingPayments
+                      .where((p) => p['status'] != 'PAID')
+                      .length),
             ],
           ),
         ),
@@ -420,12 +535,14 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     );
   }
 
-  Widget _buildMainCategoryTab(MainCategory category, IconData icon, String label, int count) {
+  Widget _buildMainCategoryTab(
+      MainCategory category, IconData icon, String label, int count) {
     bool isActive = _selectedCategory == category;
     return GestureDetector(
       onTap: () => setState(() {
         _selectedCategory = category;
-        _selectedSubState = SubState.pending; // Reset to pending when switching category
+        _selectedSubState =
+            SubState.pending; // Reset to pending when switching category
       }),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -492,7 +609,9 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               children: [
                 Icon(Icons.sync, color: Colors.grey.shade500, size: 14),
                 const SizedBox(width: 4),
-                Text('Live sync', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                Text('Live sync',
+                    style:
+                        TextStyle(color: Colors.grey.shade500, fontSize: 12)),
               ],
             )
           ],
@@ -509,7 +628,10 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         margin: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: isActive ? activeColor : Colors.transparent, width: 2)),
+          border: Border(
+              bottom: BorderSide(
+                  color: isActive ? activeColor : Colors.transparent,
+                  width: 2)),
         ),
         child: Text(
           label,
@@ -524,47 +646,307 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   }
 
   Widget _buildContentArea() {
-    if (_selectedCategory == MainCategory.vehiclePosts) return _buildVehiclePostsContent();
-    if (_selectedCategory == MainCategory.bidding) return _buildBiddingContent();
-    if (_selectedCategory == MainCategory.subscriptions) return _buildSubscriptionsContent();
+    if (_selectedCategory == MainCategory.vehiclePosts)
+      return _buildVehiclePostsContent();
+    if (_selectedCategory == MainCategory.bidding)
+      return _buildBiddingContent();
+    if (_selectedCategory == MainCategory.subscriptions)
+      return _buildSubscriptionsContent();
+    if (_selectedCategory == MainCategory.payments)
+      return _buildPaymentsContent();
     return const SizedBox();
+  }
+
+  // ==========================================
+  // PAYMENTS
+  // ==========================================
+  Widget _buildPaymentsContent() {
+    final allPayments = LocalListingsStore().pendingPayments;
+    final pending = allPayments
+        .where((p) =>
+            p['status'] == 'TOKEN PENDING VERIFICATION' ||
+            p['status'] == 'BALANCE PENDING VERIFICATION')
+        .toList();
+    final accepted = allPayments
+        .where((p) => p['status'] == 'TOKEN CONFIRMED' || p['status'] == 'PAID')
+        .toList();
+    final rejected =
+        allPayments.where((p) => p['status'] == 'PAYMENT REJECTED').toList();
+
+    if (_selectedSubState == SubState.pending) {
+      return _buildListScaffold(
+        headerText: 'PENDING PAYMENTS',
+        headerColor: _orange,
+        count: pending.length,
+        countLabel: 'to review',
+        countBadgeColor: Colors.grey.shade200,
+        countTextColor: Colors.grey.shade800,
+        items: pending,
+        itemBuilder: _buildPendingPaymentCard,
+      );
+    } else if (_selectedSubState == SubState.accepted) {
+      return _buildListScaffold(
+        headerText: 'ACCEPTED PAYMENTS',
+        headerColor: _green,
+        count: accepted.length,
+        countLabel: 'Item',
+        countBadgeColor: _green.withOpacity(0.1),
+        countTextColor: _green,
+        items: accepted,
+        itemBuilder: (item) => _buildHistoryCard(
+          icon: Icons.check_circle,
+          iconColor: _green,
+          title: '${item['vehicle']} - ₹${item['amount']}',
+          subtitle: 'Buyer: ${item['buyer']} • UTR: ${item['utr']}',
+          statusLabel: 'Confirmed',
+          statusColor: _green,
+          time: 'Confirmed just now',
+          itemId: item['id'],
+        ),
+      );
+    } else {
+      return _buildListScaffold(
+        headerText: 'REJECTED PAYMENTS',
+        headerColor: _red,
+        count: rejected.length,
+        countLabel: 'Item',
+        countBadgeColor: _red.withOpacity(0.1),
+        countTextColor: _red,
+        items: rejected,
+        itemBuilder: (item) => _buildHistoryCard(
+          icon: Icons.cancel,
+          iconColor: _red,
+          title: '${item['vehicle']} - ₹${item['amount']}',
+          subtitle: 'Buyer: ${item['buyer']} • UTR: ${item['utr']}',
+          statusLabel: 'Declined',
+          statusColor: _red,
+          time: 'Declined just now',
+        ),
+      );
+    }
+  }
+
+  Widget _buildPendingPaymentCard(Map<String, dynamic> item) {
+    return _buildCardWrapper(
+      itemId: item['id'],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                  child: Text(item['vehicle'],
+                      style: TextStyle(
+                          color: _navy,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15))),
+              Text('₹${item['amount']}',
+                  style: TextStyle(
+                      color: _navy, fontWeight: FontWeight.bold, fontSize: 15)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+              'Buyer: ${item['buyer']} • Type: ${item['type'].toString().toUpperCase()}',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+          
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
+          ),
+          
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('PAYMENT REF',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(item['utr'],
+                            style: TextStyle(
+                                color: _navy,
+                                fontSize: 13,
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: item['utr']));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                content: Text('UTR Copied!'),
+                                duration: Duration(seconds: 1)));
+                          },
+                          child: const Icon(Icons.copy, size: 14, color: Colors.blue),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('STATUS',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, size: 14, color: _green),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text('Awaiting Verification',
+                              style: TextStyle(color: _green, fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('TYPE',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(item['type'].toString().toUpperCase(),
+                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
+          ),
+          
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 16,
+            runSpacing: 16,
+            children: [
+              GestureDetector(
+                onTap: () => _showDocumentViewerPlaceholder(item['screenshot']),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.visibility, color: Colors.blue, size: 16),
+                    SizedBox(width: 6),
+                    Text('View Documents',
+                        style: TextStyle(
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => _handleReject(item['id'], MainCategory.payments),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _red,
+                      side: BorderSide(color: _red.withOpacity(0.5)),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    child: const Text('✕ Reject'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      _showConfirmationDialog(
+                        title: 'Confirm Payment Verification',
+                        content: 'Confirm you have verified this UTR (${item['utr']}) matches a real received payment of ₹${item['amount']} in your bank/UPI records?',
+                        onConfirm: () => _handleApprove(item['id'], MainCategory.payments),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _orange,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    child: const Text('✓ Confirm Payment'),
+                  ),
+                ],
+              )
+            ],
+          )
+        ],
+      ),
+    );
   }
 
   // ==========================================
   // VEHICLE POSTS
   // ==========================================
   Widget _buildVehiclePostsContent() {
+    final allPendingVehicles = LocalListingsStore().pendingListings;
+    final allAcceptedVehicles = LocalListingsStore().acceptedListings;
+    final allRejectedVehicles = LocalListingsStore().rejectedListings;
+
     if (_selectedSubState == SubState.pending) {
       return _buildListScaffold(
         headerText: 'PENDING REQUESTS',
         headerColor: _orange,
-        count: pendingVehicles.length,
+        count: allPendingVehicles.length,
         countLabel: 'to review',
         countBadgeColor: Colors.grey.shade200,
         countTextColor: Colors.grey.shade800,
-        items: pendingVehicles,
+        items: allPendingVehicles,
         itemBuilder: _buildPendingVehicleCard,
       );
     } else if (_selectedSubState == SubState.accepted) {
       return _buildListScaffold(
         headerText: 'ACCEPTED LIST (HISTORY)',
         headerColor: _green,
-        count: acceptedVehicles.length,
+        count: allAcceptedVehicles.length,
         countLabel: 'Item',
         countBadgeColor: _green.withOpacity(0.1),
         countTextColor: _green,
-        items: acceptedVehicles,
+        items: allAcceptedVehicles,
         itemBuilder: _buildAcceptedVehicleCard,
       );
     } else {
       return _buildListScaffold(
         headerText: 'REJECTED LIST (HISTORY)',
         headerColor: _red,
-        count: rejectedVehicles.length,
+        count: allRejectedVehicles.length,
         countLabel: 'Item',
         countBadgeColor: _red.withOpacity(0.1),
         countTextColor: _red,
-        items: rejectedVehicles,
+        items: allRejectedVehicles,
         itemBuilder: _buildRejectedVehicleCard,
       );
     }
@@ -572,6 +954,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
 
   Widget _buildPendingVehicleCard(Map<String, dynamic> item) {
     return _buildCardWrapper(
+      itemId: item['id'],
       child: Column(
         children: [
           Row(
@@ -579,8 +962,16 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(item['imageUrl'], width: 80, height: 80, fit: BoxFit.cover,
-                  errorBuilder: (_,__,___) => Container(width: 80, height: 80, color: Colors.grey.shade300, child: const Icon(Icons.car_crash)),
+                child: Image.network(
+                  item['imageUrl'],
+                  width: 80,
+                  height: 80,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                      width: 80,
+                      height: 80,
+                      color: Colors.grey.shade300,
+                      child: const Icon(Icons.car_crash)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -595,68 +986,147 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                         Expanded(
                           child: Text(
                             item['title'],
-                            style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15),
+                            style: TextStyle(
+                                color: _navy,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Text(item['price'], style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text(item['price'],
+                            style: TextStyle(
+                                color: _navy,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15)),
                       ],
                     ),
                     if (item['tag'] != null)
                       Container(
                         margin: const EdgeInsets.only(top: 4, bottom: 2),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
-                        child: Text(item['tag'], style: TextStyle(color: Colors.grey.shade700, fontSize: 10)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(4)),
+                        child: Text(item['tag'],
+                            style: TextStyle(
+                                color: Colors.grey.shade700, fontSize: 10)),
                       ),
                     const SizedBox(height: 4),
-                    Text('Seller: ${item['sellerName']} • ${item['location']} (${item['stateCode']})', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                    Text('Submitted ${item['timeAgo']}', style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic)),
+                    Text(
+                        'Seller: ${item['sellerName']} • ${item['location']} (${item['stateCode']})',
+                        style: TextStyle(
+                            color: Colors.grey.shade600, fontSize: 12)),
+                    Text('Submitted ${item['timeAgo']}',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic)),
                   ],
                 ),
               ),
             ],
           ),
+          
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1),
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
           ),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            runSpacing: 8,
+          
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildInfoColumn('LISTING TYPE', item['type']),
-              _buildInfoColumn('RC STATUS', '● ${item['rcStatus']}', valueColor: item['rcStatus'] == 'Clear' ? _green : _orange),
-              _buildInfoColumn('INSPECTION', item['inspection']),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('LISTING TYPE',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(item['type'],
+                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('RC STATUS',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text('● ${item['rcStatus']}',
+                        style: TextStyle(
+                            color: item['rcStatus'] == 'Clear' ? _green : _orange,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('INSPECTION',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(item['inspection'],
+                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
+          ),
+          
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
-            runSpacing: 8,
+            spacing: 16,
+            runSpacing: 16,
             children: [
               GestureDetector(
-                onTap: _showDocumentViewerPlaceholder,
+                onTap: () => _showDocumentViewerPlaceholder(null),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.visibility, color: Colors.blue, size: 16),
-                    SizedBox(width: 4),
-                    Text('View Documents', style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline, fontSize: 13, fontWeight: FontWeight.w600)),
+                    SizedBox(width: 6),
+                    Text('View Documents',
+                        style: TextStyle(
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
               Wrap(
-                spacing: 8,
+                spacing: 12,
+                runSpacing: 12,
                 children: [
                   OutlinedButton(
                     onPressed: () => _handleReject(item['id'], MainCategory.vehiclePosts),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _red,
                       side: BorderSide(color: _red.withOpacity(0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -669,7 +1139,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                       backgroundColor: _orange,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -694,6 +1164,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
       statusLabel: 'Approved',
       statusColor: _green,
       time: item['time'],
+      itemId: item['id'],
     );
   }
 
@@ -713,37 +1184,41 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   // BIDDING
   // ==========================================
   Widget _buildBiddingContent() {
+    final allPendingBids = LocalListingsStore().pendingBids;
+    final allAcceptedBids = LocalListingsStore().acceptedBids;
+    final allRejectedBids = LocalListingsStore().rejectedBids;
+
     if (_selectedSubState == SubState.pending) {
       return _buildListScaffold(
         headerText: 'INCOMING / PENDING BIDS',
         headerColor: _orange,
-        count: pendingBids.length,
+        count: allPendingBids.length,
         countLabel: 'to review',
         countBadgeColor: Colors.grey.shade200,
         countTextColor: Colors.grey.shade800,
-        items: pendingBids,
+        items: allPendingBids,
         itemBuilder: _buildPendingBidCard,
       );
     } else if (_selectedSubState == SubState.accepted) {
       return _buildListScaffold(
         headerText: 'ACCEPTED BIDS HISTORY',
         headerColor: _green,
-        count: acceptedBids.length,
+        count: allAcceptedBids.length,
         countLabel: 'Item',
         countBadgeColor: _green.withOpacity(0.1),
         countTextColor: _green,
-        items: acceptedBids,
+        items: allAcceptedBids,
         itemBuilder: _buildAcceptedBidCard,
       );
     } else {
       return _buildListScaffold(
         headerText: 'REJECTED BIDS HISTORY',
         headerColor: _red,
-        count: rejectedBids.length,
+        count: allRejectedBids.length,
         countLabel: 'Item',
         countBadgeColor: _red.withOpacity(0.1),
         countTextColor: _red,
-        items: rejectedBids,
+        items: allRejectedBids,
         itemBuilder: _buildRejectedBidCard,
       );
     }
@@ -751,6 +1226,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
 
   Widget _buildPendingBidCard(Map<String, dynamic> item) {
     return _buildCardWrapper(
+      itemId: item['id'],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -759,10 +1235,16 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: _navy, borderRadius: BorderRadius.circular(12)),
-                child: Text('AUCTION #${item['auctionId']}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                decoration: BoxDecoration(
+                    color: _navy, borderRadius: BorderRadius.circular(12)),
+                child: Text('AUCTION #${item['auctionId']}',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold)),
               ),
-              Text(item['timeAgo'], style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+              Text(item['timeAgo'],
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
             ],
           ),
           const SizedBox(height: 12),
@@ -776,63 +1258,143 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                   children: [
                     Text(
                       item['title'],
-                      style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 16),
+                      style: TextStyle(
+                          color: _navy,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Text('Bidder: ${item['bidderName']} (@${item['bidderUsername']}) • Dealer ID: ${item['dealerId']}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                    Text(
+                        'Bidder: ${item['bidderName']} (@${item['bidderUsername']}) • Dealer ID: ${item['dealerId']}',
+                        style: TextStyle(
+                            color: Colors.grey.shade600, fontSize: 12)),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('SUBMITTED BID', style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.bold)),
-                  Text(item['bidAmount'], style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text('SUBMITTED BID',
+                      style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
+                  Text(item['bidAmount'],
+                      style: TextStyle(
+                          color: _navy,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16)),
                 ],
               )
             ],
           ),
+          
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1),
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
           ),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            runSpacing: 8,
+          
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildInfoColumn('TOKEN DEPOSIT', '✓ ${item['depositAmount']} Paid', valueColor: _green),
-              _buildInfoColumn('ESCROW HOLD', item['escrow']),
-              _buildInfoColumn('DEALER SCORE', item['score']),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('TOKEN DEPOSIT',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, size: 14, color: _green),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text('${item['depositAmount']} Paid',
+                              style: TextStyle(color: _green, fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('ESCROW HOLD',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(item['escrow'],
+                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('DEALER SCORE',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(item['score'],
+                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
+          ),
+          
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
-            runSpacing: 8,
+            spacing: 16,
+            runSpacing: 16,
             children: [
               GestureDetector(
-                onTap: _showDocumentViewerPlaceholder,
+                onTap: () => _showDocumentViewerPlaceholder(null),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.visibility, color: Colors.blue, size: 16),
-                    SizedBox(width: 4),
-                    Text('View Audit Trail', style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline, fontSize: 13, fontWeight: FontWeight.w600)),
+                    SizedBox(width: 6),
+                    Text('View Audit Trail',
+                        style: TextStyle(
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
               Wrap(
-                spacing: 8,
+                spacing: 12,
+                runSpacing: 12,
                 children: [
                   OutlinedButton(
                     onPressed: () => _handleReject(item['id'], MainCategory.bidding),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _red,
                       side: BorderSide(color: _red.withOpacity(0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -845,7 +1407,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                       backgroundColor: _orange,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -870,6 +1432,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
       statusLabel: 'Accepted',
       statusColor: _green,
       time: item['time'],
+      itemId: item['id'],
     );
   }
 
@@ -889,37 +1452,41 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   // SUBSCRIPTIONS
   // ==========================================
   Widget _buildSubscriptionsContent() {
+    final allPendingSubs = LocalListingsStore().pendingSubscriptions;
+    final allAcceptedSubs = LocalListingsStore().acceptedSubscriptions;
+    final allRejectedSubs = LocalListingsStore().rejectedSubscriptions;
+
     if (_selectedSubState == SubState.pending) {
       return _buildListScaffold(
         headerText: 'INCOMING/PENDING SUBSCRIPTIONS',
         headerColor: _orange,
-        count: pendingSubscriptions.length,
+        count: allPendingSubs.length,
         countLabel: 'to review',
         countBadgeColor: Colors.grey.shade200,
         countTextColor: Colors.grey.shade800,
-        items: pendingSubscriptions,
+        items: allPendingSubs,
         itemBuilder: _buildPendingSubscriptionCard,
       );
     } else if (_selectedSubState == SubState.accepted) {
       return _buildListScaffold(
         headerText: 'ACCEPTED SUBSCRIPTIONS HISTORY',
         headerColor: _green,
-        count: acceptedSubscriptions.length,
+        count: allAcceptedSubs.length,
         countLabel: 'Item',
         countBadgeColor: _green.withOpacity(0.1),
         countTextColor: _green,
-        items: acceptedSubscriptions,
+        items: allAcceptedSubs,
         itemBuilder: _buildAcceptedSubscriptionCard,
       );
     } else {
       return _buildListScaffold(
         headerText: 'REJECTED SUBSCRIPTIONS HISTORY',
         headerColor: _red,
-        count: rejectedSubscriptions.length,
+        count: allRejectedSubs.length,
         countLabel: 'Item',
         countBadgeColor: _red.withOpacity(0.1),
         countTextColor: _red,
-        items: rejectedSubscriptions,
+        items: allRejectedSubs,
         itemBuilder: _buildRejectedSubscriptionCard,
       );
     }
@@ -927,6 +1494,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
 
   Widget _buildPendingSubscriptionCard(Map<String, dynamic> item) {
     return _buildCardWrapper(
+      itemId: item['id'],
       child: Column(
         children: [
           Row(
@@ -936,7 +1504,12 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(color: _navy, shape: BoxShape.circle),
-                child: Icon(item['tier'] == 'Elite Dealer' ? Icons.stars : Icons.workspace_premium, color: const Color(0xFFFFD700), size: 24),
+                child: Icon(
+                    item['tier'] == 'Elite Dealer'
+                        ? Icons.stars
+                        : Icons.workspace_premium,
+                    color: const Color(0xFFFFD700),
+                    size: 24),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -948,16 +1521,26 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                         Expanded(
                           child: Text(
                             item['businessName'] ?? 'Unknown Business',
-                            style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15),
+                            style: TextStyle(
+                                color: _navy,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: item['tierColor'] ?? Colors.blue, borderRadius: BorderRadius.circular(12)),
-                          child: Text(item['tier'] ?? 'Unknown Tier', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: item['tierColor'] ?? Colors.blue,
+                              borderRadius: BorderRadius.circular(12)),
+                          child: Text(item['tier'] ?? 'Unknown Tier',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
@@ -965,66 +1548,170 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                     Wrap(
                       spacing: 4,
                       children: [
-                        Text('${item['id1Label'] ?? 'ID'}: ${item['id1Value'] ?? 'N/A'}', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-                        Text('•', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-                        Text('${item['id2Label'] ?? 'ID'}: ${item['id2Value'] ?? 'N/A'}', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                        Text(
+                            '${item['id1Label'] ?? 'ID'}: ${item['id1Value'] ?? 'N/A'}',
+                            style: TextStyle(
+                                color: Colors.grey.shade600, fontSize: 11)),
+                        Text('•',
+                            style: TextStyle(
+                                color: Colors.grey.shade600, fontSize: 11)),
+                        Text(
+                            '${item['id2Label'] ?? 'ID'}: ${item['id2Value'] ?? 'N/A'}',
+                            style: TextStyle(
+                                color: Colors.grey.shade600, fontSize: 11)),
                       ],
                     ),
-                    Text('Submitted ${item['timeAgo'] ?? 'Recently'}', style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic)),
+                    Text('Submitted ${item['timeAgo'] ?? 'Recently'}',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic)),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('PLAN TIER', style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.bold)),
-                  Text(item['price'] ?? 'N/A', style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text('PLAN TIER',
+                      style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
+                  Text(item['price'] ?? 'N/A',
+                      style: TextStyle(
+                          color: _navy,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
                 ],
               )
             ],
           ),
+          
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1),
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
           ),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            runSpacing: 8,
+          
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildInfoColumn('PAYMENT REF', item['payRef'] ?? 'Pending'),
-              _buildInfoColumn('PAYMENT', '✓ ${item['paymentStatus'] ?? 'Awaiting Verification'}', valueColor: _green),
-              if (item.containsKey('gstStatus') && item['gstStatus'] != null)
-                _buildInfoColumn('GST STATUS', item['gstStatus'])
-              else
-                _buildInfoColumn('KYC DOCS', item['kycDocs'] ?? 'Not Attached'),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('PAYMENT REF',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(item['payRef'] ?? 'Pending',
+                            style: TextStyle(
+                                color: _navy,
+                                fontSize: 13,
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.w600)),
+                        if (item['payRef'] != null) ...[
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: item['payRef']));
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                  content: Text('UTR Copied!'),
+                                  duration: Duration(seconds: 1)));
+                            },
+                            child: const Icon(Icons.copy, size: 14, color: Colors.blue),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('PAYMENT STATUS',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, size: 14, color: _green),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(item['paymentStatus'] ?? 'Awaiting Verification',
+                              style: TextStyle(color: _green, fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.containsKey('gstStatus') && item['gstStatus'] != null ? 'GST STATUS' : 'KYC DOCS',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(item.containsKey('gstStatus') && item['gstStatus'] != null ? item['gstStatus'] : (item['kycDocs'] ?? 'Not Attached'),
+                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
+          ),
+          
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
-            runSpacing: 8,
+            spacing: 16,
+            runSpacing: 16,
             children: [
               GestureDetector(
-                onTap: _showDocumentViewerPlaceholder,
+                onTap: () => _showDocumentViewerPlaceholder(item['screenshot']),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.visibility, color: Colors.blue, size: 16),
-                    SizedBox(width: 4),
-                    Text('View Documents', style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline, fontSize: 13, fontWeight: FontWeight.w600)),
+                    SizedBox(width: 6),
+                    Text('View Documents',
+                        style: TextStyle(
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
               Wrap(
-                spacing: 8,
+                spacing: 12,
+                runSpacing: 12,
                 children: [
                   OutlinedButton(
                     onPressed: () => _handleReject(item['id'], MainCategory.subscriptions),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _red,
                       side: BorderSide(color: _red.withOpacity(0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -1032,12 +1719,18 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                     child: const Text('✕ Reject'),
                   ),
                   ElevatedButton(
-                    onPressed: () => _handleApprove(item['id'], MainCategory.subscriptions),
+                    onPressed: () {
+                      _showConfirmationDialog(
+                        title: 'Confirm Payment Verification',
+                        content: 'Confirm you have verified this UTR (${item['payRef']}) matches a real received payment of ${item['price']} in your bank/UPI records?',
+                        onConfirm: () => _handleApprove(item['id'], MainCategory.subscriptions),
+                      );
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _orange,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -1057,11 +1750,14 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     return _buildHistoryCard(
       icon: Icons.check_circle,
       iconColor: _green,
-      title: '${item['businessName'] ?? 'Unknown'} (${item['tier'] ?? 'Unknown'} - ${item['price'] ?? 'N/A'})',
-      subtitle: '${item['id1Label'] ?? 'ID'}: ${item['id1Value'] ?? 'N/A'} • Ref: #${item['ref'] ?? 'N/A'}',
+      title:
+          '${item['businessName'] ?? 'Unknown'} (${item['tier'] ?? 'Unknown'} - ${item['price'] ?? 'N/A'})',
+      subtitle:
+          '${item['id1Label'] ?? 'ID'}: ${item['id1Value'] ?? 'N/A'} • Ref: #${item['ref'] ?? 'N/A'}',
       statusLabel: 'Approved',
       statusColor: _green,
       time: item['time'] ?? 'Just now',
+      itemId: item['id'],
     );
   }
 
@@ -1069,14 +1765,16 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     return _buildHistoryCard(
       icon: Icons.cancel,
       iconColor: _red,
-      title: '${item['businessName'] ?? 'Unknown'} (${item['tier'] ?? 'Unknown'})',
-      subtitle: 'Dealer: ${item['dealerName'] ?? 'Unknown'} • ${item['reason'] ?? 'Rejected'}',
+      title:
+          '${item['businessName'] ?? 'Unknown'} (${item['tier'] ?? 'Unknown'})',
+      subtitle:
+          'Dealer: ${item['dealerName'] ?? 'Unknown'} • ${item['reason'] ?? 'Rejected'}',
       statusLabel: 'Declined',
       statusColor: _red,
       time: item['time'] ?? 'Just now',
+      itemId: item['id'],
     );
   }
-
 
   // ==========================================
   // SHARED HELPERS
@@ -1106,7 +1804,11 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                     Expanded(
                       child: Text(
                         headerText,
-                        style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5),
+                        style: TextStyle(
+                            color: _navy,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            letterSpacing: 0.5),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1117,17 +1819,26 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: countBadgeColor, borderRadius: BorderRadius.circular(12)),
-                child: Text('$count $countLabel', style: TextStyle(color: countTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                decoration: BoxDecoration(
+                    color: countBadgeColor,
+                    borderRadius: BorderRadius.circular(12)),
+                child: Text('$count $countLabel',
+                    style: TextStyle(
+                        color: countTextColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         ),
         Expanded(
           child: items.isEmpty
-              ? Center(child: Text('No items found.', style: TextStyle(color: Colors.grey.shade500)))
+              ? Center(
+                  child: Text('No items found.',
+                      style: TextStyle(color: Colors.grey.shade500)))
               : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 16),
                   itemBuilder: (ctx, idx) => itemBuilder(items[idx]),
@@ -1137,14 +1848,20 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     );
   }
 
-  Widget _buildCardWrapper({required Widget child}) {
+  Widget _buildCardWrapper({required Widget child, String? itemId}) {
+    bool isHighlighted =
+        widget.highlightId != null && widget.highlightId == itemId;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isHighlighted ? const Color(0xFFFFF7ED) : Colors.white,
+        border: isHighlighted ? Border.all(color: _orange, width: 2) : null,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 8,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: child,
@@ -1159,8 +1876,10 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     required String statusLabel,
     required Color statusColor,
     required String time,
+    String? itemId,
   }) {
     return _buildCardWrapper(
+      itemId: itemId,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1170,18 +1889,29 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(title,
+                    style: TextStyle(
+                        color: _navy,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15)),
                 const SizedBox(height: 4),
-                Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                Text(subtitle,
+                    style:
+                        TextStyle(color: Colors.grey.shade600, fontSize: 12)),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(statusLabel,
+                  style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13)),
               const SizedBox(height: 4),
-              Text(time, style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+              Text(time,
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
             ],
           )
         ],
@@ -1193,9 +1923,17 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.bold)),
+        Text(label,
+            style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 10,
+                fontWeight: FontWeight.bold)),
         const SizedBox(height: 2),
-        Text(value, style: TextStyle(color: valueColor ?? _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+        Text(value,
+            style: TextStyle(
+                color: valueColor ?? _navy,
+                fontSize: 13,
+                fontWeight: FontWeight.w600)),
       ],
     );
   }

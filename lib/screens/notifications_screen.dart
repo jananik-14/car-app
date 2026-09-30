@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../utils/global_store.dart';
-
+import '../services/client_notification_store.dart';
+import '../services/auth_service.dart';
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -15,17 +16,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scrollableContent = Column(
-      children: [
-        _buildHeader(),
-        _buildNotificationList(),
-      ],
-    );
-
     return ResponsiveNavScaffold(
       currentIndex: 3,
-      body: SingleChildScrollView(
-        child: scrollableContent,
+      body: ListenableBuilder(
+        listenable: ClientNotificationStore(),
+        builder: (context, _) {
+          return SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildHeader(),
+                _buildNotificationList(),
+              ],
+            ),
+          );
+        }
       ),
     );
   }
@@ -102,7 +106,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (!_isCleared) ...[
+                if (!_isCleared && ClientNotificationStore().unreadCountFor(AuthService().currentPhone ?? '') > 0) ...[
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.all(6),
@@ -110,9 +114,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       color: AppColors.secondaryContainer,
                       shape: BoxShape.circle,
                     ),
-                    child: const Text(
-                      '4',
-                      style: TextStyle(
+                    child: Text(
+                      '${ClientNotificationStore().unreadCountFor(AuthService().currentPhone ?? '')}',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -128,6 +132,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             onTap: () {
               setState(() {
                 _isCleared = true;
+                ClientNotificationStore().markAllAsReadFor(AuthService().currentPhone ?? '');
               });
             },
             child: Container(
@@ -158,7 +163,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildNotificationList() {
-    if (_isCleared) {
+    final phone = AuthService().currentPhone ?? '';
+    final notifs = ClientNotificationStore().forCurrentUser(phone);
+    if (_isCleared || notifs.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(48.0),
         child: Column(
@@ -187,78 +194,47 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: Column(
         children: [
-          ...GlobalStore.notifications.map((notif) {
+          ...notifs.map((notif) {
+            IconData iconData = Icons.notifications;
+            Color iconBgColor = AppColors.primary;
+            if (notif.type.endsWith('_approved') || notif.type.endsWith('_accepted') || notif.type == 'payment_confirmed') {
+              iconData = Icons.check_circle;
+              iconBgColor = const Color(0xFF22C55E); // green
+            } else if (notif.type.endsWith('_rejected')) {
+              iconData = Icons.cancel;
+              iconBgColor = const Color(0xFFEF4444); // red
+            }
+
             return Column(
               children: [
                 _buildNotificationCard(
-                  iconData: notif['iconData'],
-                  iconColor: notif['iconColor'],
-                  iconBgColor: notif['iconBgColor'],
-                  title: notif['title'],
-                  boldHighlight: notif['boldHighlight'],
-                  highlightColor: notif['highlightColor'],
-                  content: notif['content'],
-                  time: notif['time'],
-                  showDot: notif['showDot'],
-                  dotColor: notif['dotColor'],
+                  iconData: iconData,
+                  iconColor: Colors.white,
+                  iconBgColor: iconBgColor,
+                  title: notif.title,
+                  boldHighlight: '',
+                  highlightColor: iconBgColor,
+                  content: '', // content was absorbed into title
+                  time: _formatTimeAgo(notif.timestamp),
+                  showDot: !notif.isRead,
+                  dotColor: AppColors.secondaryContainer,
                 ),
                 const SizedBox(height: 16),
               ],
             );
           }).toList(),
-          _buildNotificationCard(
-            iconData: Icons.gavel,
-            iconColor: Colors.white,
-            iconBgColor: AppColors.secondaryContainer,
-            title: 'Outbid on ',
-            boldHighlight: 'Audi Q5',
-            highlightColor: AppColors.secondaryContainer,
-            content: '. New highest bid is ₹39.00 Lakhs.',
-            time: '10m ago',
-            showDot: true,
-            dotColor: AppColors.secondaryContainer,
-          ),
-          const SizedBox(height: 16),
-          _buildNotificationCard(
-            iconData: Icons.check,
-            iconColor: Colors.white,
-            iconBgColor: AppColors.primary,
-            title: 'Listing Approved: ',
-            boldHighlight: 'Tata Harrier',
-            highlightColor: AppColors.primary,
-            content: ' is now live in auction.',
-            time: '1h ago',
-            showDot: true,
-            dotColor: AppColors.outline,
-          ),
-          const SizedBox(height: 16),
-          _buildNotificationCard(
-            iconData: Icons.notifications_active,
-            iconColor: AppColors.primary,
-            iconBgColor: const Color(0xFFEEF1F7),
-            title: 'Auction starts in 15 mins for ',
-            boldHighlight: 'BMW 3 Series',
-            highlightColor: AppColors.primary,
-            content: '.',
-            time: '3h ago',
-            showDot: false,
-          ),
-          const SizedBox(height: 16),
-          _buildNotificationCard(
-            iconData: Icons.account_balance_wallet,
-            iconColor: AppColors.primary,
-            iconBgColor: const Color(0xFFEEF1F7),
-            title: 'Token deposit of ₹25,000 received successfully.',
-            boldHighlight: '',
-            highlightColor: AppColors.primary,
-            content: '',
-            time: 'Yesterday',
-            showDot: false,
-          ),
           const SizedBox(height: 32),
         ],
       ),
     );
+  }
+
+  String _formatTimeAgo(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 
   Widget _buildNotificationCard({

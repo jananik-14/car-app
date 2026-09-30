@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../utils/admin_navigation_helper.dart';
+import '../utils/logout_helper.dart';
 
 class AdminNavigationDrawer extends StatelessWidget {
   const AdminNavigationDrawer({super.key});
@@ -114,6 +115,15 @@ class AdminNavigationDrawer extends StatelessWidget {
                     await AdminNavigationHelper.confirmAndSwitchToClient(context);
                   },
                   showChevron: true,
+                ),
+                _buildNavItem(
+                  context,
+                  icon: Icons.logout,
+                  label: '7. Logout',
+                  onTap: () {
+                    Navigator.pop(context);
+                    confirmAndLogout(context);
+                  },
                 ),
               ],
             ),

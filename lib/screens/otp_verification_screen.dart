@@ -3,8 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../utils/temp_admin_config.dart';
+import '../services/admin_notification_store.dart';
 import '../utils/profile_storage_helper.dart';
 import '../widgets/responsive_layout_wrapper.dart';
+import '../services/subscription_store.dart';
+import '../services/auth_service.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -251,12 +254,18 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Future<void> _handleOtpVerified(String enteredPhoneNumber) async {
     // Set the global current logged in phone for other screens to use
     await ProfileStorageHelper.setCurrentLoggedInPhone(enteredPhoneNumber);
+    await SubscriptionStore().init(enteredPhoneNumber);
     
+    // Fix: explicitly log the user in with AuthService
+    await AuthService().login(enteredPhoneNumber);
+    print('AUTH DEBUG: login phone=$enteredPhoneNumber');
+
     final bool isProfileComplete = await ProfileStorageHelper.isProfileComplete(enteredPhoneNumber);
 
     print('DEBUG: Phone entered = $enteredPhoneNumber, isAdmin = ${TempAdminConfig.isAdminNumber(enteredPhoneNumber)}, isProfileComplete = $isProfileComplete');
 
     // TEMPORARY FRONTEND-ONLY ADMIN CHECK — remove once backend sends real role-based login
+
     if (TempAdminConfig.isAdminNumber(enteredPhoneNumber)) {
       if (context.mounted) {
         context.go('/admin');
@@ -265,6 +274,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
 
     // Regular customer flow
+    final realName = await ProfileStorageHelper.getProfileField(enteredPhoneNumber, 'user_name');
+    final displayName = (realName != null && realName.isNotEmpty) ? realName : enteredPhoneNumber;
+    AdminNotificationStore().addNotification('Client login: $displayName logged in', 'login');
     if (!isProfileComplete) {
       if (context.mounted) {
         context.go('/profile_creation');

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-
+import '../services/auth_service.dart';
+import '../services/client_notification_store.dart';
 class AppSidebar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
@@ -33,11 +34,15 @@ class AppSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = isAdmin ? _adminItems : _items;
 
-    return Container(
-      width: 180,
-      color: Colors.white,
-      child: Column(
-        children: [
+    return ListenableBuilder(
+      listenable: ClientNotificationStore(),
+      builder: (context, child) {
+        final unreadCount = ClientNotificationStore().unreadCountFor(AuthService().currentPhone ?? '');
+        return Container(
+          width: 180,
+          color: Colors.white,
+          child: Column(
+            children: [
           const SizedBox(height: 20),
           Container(
             width: 100,
@@ -90,13 +95,25 @@ class AppSidebar extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      Icon(
-                        items[i].icon,
-                        color: currentIndex == i
-                            ? Colors.white
-                            : const Color(0xFF001128),
-                        size: 22,
-                      ),
+                      if (!isAdmin && i == 3 && unreadCount > 0)
+                        Badge(
+                          label: Text('$unreadCount'),
+                          child: Icon(
+                            items[i].icon,
+                            color: currentIndex == i
+                                ? Colors.white
+                                : const Color(0xFF001128),
+                            size: 22,
+                          ),
+                        )
+                      else
+                        Icon(
+                          items[i].icon,
+                          color: currentIndex == i
+                              ? Colors.white
+                              : const Color(0xFF001128),
+                          size: 22,
+                        ),
                       const SizedBox(height: 4),
                       Text(
                         items[i].label,
@@ -118,6 +135,8 @@ class AppSidebar extends StatelessWidget {
             ),
         ],
       ),
+    );
+      }
     );
   }
 }

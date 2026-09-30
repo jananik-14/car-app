@@ -5,7 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../utils/profile_storage_helper.dart';
 import '../widgets/profile_form_fields.dart';
+import '../services/admin_notification_store.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
+import '../widgets/kyc_upload_field.dart';
+import '../services/auth_service.dart';
 
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
@@ -18,6 +21,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   // Local state
   bool _isLoading = true;
   Uint8List? _profileImageBytes;
+  bool _kycUploaded = false;
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
@@ -32,7 +36,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Future<void> _loadProfileData() async {
-    final phone = await ProfileStorageHelper.getCurrentLoggedInPhone();
+    final phone = AuthService().currentPhone;
     if (phone == null) return;
 
     final name = await ProfileStorageHelper.getProfileField(phone, 'user_name');
@@ -40,6 +44,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         await ProfileStorageHelper.getProfileField(phone, 'user_email');
     final city = await ProfileStorageHelper.getProfileField(phone, 'user_city');
     final dob = await ProfileStorageHelper.getProfileField(phone, 'user_dob');
+    final prefs = await SharedPreferences.getInstance();
+    final kycUploaded = prefs.getBool('kyc_uploaded_$phone') ?? false;
 
     setState(() {
       _nameController.text = name ?? '';
@@ -47,6 +53,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _addressController.text = city ?? '';
       _dobController.text = dob ?? '';
       _mobileController.text = phone; // Actually display the logged in phone!
+      _kycUploaded = kycUploaded;
       _isLoading = false;
     });
   }
@@ -62,7 +69,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Future<void> _saveChanges() async {
-    final phone = await ProfileStorageHelper.getCurrentLoggedInPhone();
+    final phone = AuthService().currentPhone;
     if (phone == null) return;
 
     await ProfileStorageHelper.saveProfileField(
@@ -75,6 +82,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         phone, 'user_dob', _dobController.text.trim());
 
     if (mounted) {
+      final fullName = _nameController.text.trim();
+      AdminNotificationStore().addNotification('Profile updated: $fullName updated their profile details', 'profile_edit');
+      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Profile updated successfully!'),
@@ -128,6 +138,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           },
                           onChanged: () {
                             // Update state if we wanted to validate
+                          },
+                        ),
+                        const SizedBox(height: 24),
+                        KycUploadField(
+                          initialIsUploaded: _kycUploaded,
+                          onChanged: (file, bytes) {
+                            if (file != null) {
+                              SharedPreferences.getInstance().then((prefs) {
+                                prefs.setBool('kyc_uploaded_${_mobileController.text}', true);
+                              });
+                            }
                           },
                         ),
                         const SizedBox(height: 32),

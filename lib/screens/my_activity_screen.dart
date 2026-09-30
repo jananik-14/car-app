@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
+import '../utils/local_listings_store.dart';
 
 class MyActivityScreen extends StatefulWidget {
   const MyActivityScreen({super.key});
@@ -11,6 +12,22 @@ class MyActivityScreen extends StatefulWidget {
 }
 
 class _MyActivityScreenState extends State<MyActivityScreen> {
+  @override
+  void initState() {
+    super.initState();
+    LocalListingsStore().addListener(_onStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    LocalListingsStore().removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    setState(() {});
+  }
+
   final Color navyBlue = const Color(0xFF001128);
   final Color orange = const Color(0xFFFB7800);
 
@@ -24,7 +41,8 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
       'user_bid': '14,20,000',
       'highest_bid': '14,50,000',
       'status': 'Outbid',
-      'end_time': '02h 15m'
+      'end_time': '02h 15m',
+      'city': 'Chennai',
     },
     {
       'id': 'b2',
@@ -32,8 +50,9 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
       'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=400&q=80',
       'user_bid': '5,40,000',
       'highest_bid': '5,40,000',
-      'status': 'Winning',
-      'end_time': '00h 45m'
+      'status': 'Won',
+      'end_time': 'Ended',
+      'city': 'Delhi',
     },
     {
       'id': 'b3',
@@ -42,7 +61,8 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
       'user_bid': '7,10,000',
       'highest_bid': '7,50,000',
       'status': 'Lost',
-      'end_time': 'Ended'
+      'end_time': 'Ended',
+      'city': 'Pune',
     },
   ];
 
@@ -53,6 +73,7 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
       'image': 'https://images.unsplash.com/photo-1519641471654-76ce0107ad1b',
       'highest_bid': '15,00,000',
       'status': 'Live',
+      'city': 'Mumbai',
     },
     {
       'id': 'l2',
@@ -60,6 +81,7 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
       'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf',
       'highest_bid': '-',
       'status': 'Pending Approval',
+      'city': 'Bangalore',
     }
   ];
 
@@ -206,11 +228,33 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
   }
 
   Widget _buildBidCard(Map<String, dynamic> bid) {
+    String currentStatus = bid['status'];
+    for (var p in LocalListingsStore().pendingPayments) {
+      if (p['id'] == bid['id']) {
+        currentStatus = p['status'];
+      }
+    }
+
     Color statusColor;
-    switch (bid['status']) {
-      case 'Winning':
-      case 'Won':
+    switch (currentStatus) {
+      case 'TOKEN PENDING VERIFICATION':
+      case 'BALANCE PENDING VERIFICATION':
+        statusColor = Colors.orange;
+        break;
+      case 'TOKEN CONFIRMED':
+        statusColor = Colors.blue;
+        break;
+      case 'PAID':
         statusColor = Colors.green;
+        break;
+      case 'Winning':
+        statusColor = Colors.green;
+        break;
+      case 'Won':
+        statusColor = const Color(0xFFF59E0B);
+        break;
+      case 'PAYMENT PENDING':
+        statusColor = Colors.blue;
         break;
       case 'Outbid':
       case 'Lost':
@@ -251,9 +295,18 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
                     color: statusColor,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Text(
-                    bid['status'].toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (bid['status'] == 'Won') ...[
+                        const Icon(Icons.emoji_events, size: 14, color: Colors.white),
+                        const SizedBox(width: 4),
+                      ],
+                      Text(
+                        bid['status'].toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -264,7 +317,7 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(16)),
                   child: Text(
-                    bid['end_time'] == 'Ended' ? 'Ended' : 'Ends in ${bid['end_time']}',
+                    currentStatus == 'Won' || currentStatus == 'PAYMENT PENDING' || currentStatus == 'TOKEN PENDING VERIFICATION' || currentStatus == 'TOKEN CONFIRMED' || currentStatus == 'BALANCE PENDING VERIFICATION' || currentStatus == 'PAID' ? 'Auction Ended' : (bid['end_time'] == 'Ended' ? 'Ended' : 'Ends in ${bid['end_time']}'),
                     style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -281,6 +334,17 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
                   style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      bid['city'] ?? 'Unknown Location',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 Wrap(
@@ -306,6 +370,45 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
                     ),
                   ],
                 ),
+                if (currentStatus == 'Won' || currentStatus == 'PAYMENT PENDING' || currentStatus == 'TOKEN PENDING VERIFICATION' || currentStatus == 'TOKEN CONFIRMED' || currentStatus == 'BALANCE PENDING VERIFICATION' || currentStatus == 'PAID') ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: (currentStatus == 'PAYMENT PENDING' || currentStatus == 'TOKEN PENDING VERIFICATION' || currentStatus == 'BALANCE PENDING VERIFICATION' || currentStatus == 'PAID') ? null : () async {
+                        final amountStr = bid['user_bid'].toString().replaceAll(',', '');
+                        final int amount = int.tryParse(amountStr) ?? 0;
+                        
+                        String initialStep = 'token';
+                        if (currentStatus == 'TOKEN CONFIRMED') initialStep = 'balance';
+
+                        final result = await context.push(
+                          '/payment',
+                          extra: {
+                            'id': bid['id'],
+                            'title': bid['title'],
+                            'image': bid['image'],
+                            'amount': amount,
+                            'seller': bid['seller'] ?? 'Verified Seller',
+                            'initialStep': initialStep,
+                          },
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: (currentStatus == 'PAYMENT PENDING' || currentStatus == 'TOKEN PENDING VERIFICATION' || currentStatus == 'BALANCE PENDING VERIFICATION' || currentStatus == 'PAID') ? Colors.grey : orange,
+                        disabledBackgroundColor: Colors.grey,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: Text(
+                        currentStatus == 'TOKEN PENDING VERIFICATION' ? 'Token Verification Pending' :
+                        currentStatus == 'BALANCE PENDING VERIFICATION' ? 'Balance Verification Pending' :
+                        currentStatus == 'PAID' ? 'Payment Complete' : 
+                        currentStatus == 'TOKEN CONFIRMED' ? 'Pay Balance' : 'Pay Token', 
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -382,6 +485,17 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
                   style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      listing['city'] ?? 'Unknown Location',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Row(

@@ -5,10 +5,10 @@
 // GET /api/admin/completed-profiles (Profile-Completed tab)
 
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../widgets/admin_navigation_drawer.dart';
 import '../widgets/admin_app_bar.dart';
+import '../services/admin_clients_store.dart';
 
 class AdminClientsDetailsScreen extends StatefulWidget {
   const AdminClientsDetailsScreen({super.key});
@@ -21,30 +21,10 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
   int _activeTabIndex = 0;
   String _searchQuery = '';
 
-  // Dummy data
-  final List<Map<String, dynamic>> _dummyClients = [
-    {'name': 'Vikram Rathore', 'email': 'vikram@example.com', 'date': '12 Sep 2026', 'status': 'Verified'},
-    {'name': 'Priya Sharma', 'email': 'priya.s@example.com', 'date': '10 Sep 2026', 'status': 'Pending'},
-    {'name': 'Amit Kumar', 'email': 'amit.k@example.com', 'date': '08 Sep 2026', 'status': 'Verified'},
-    {'name': 'Sneha Patel', 'email': 'sneha.p@example.com', 'date': '05 Sep 2026', 'status': 'Verified'},
-    {'name': 'Rahul Verma', 'email': 'rahul.v@example.com', 'date': '01 Sep 2026', 'status': 'Pending'},
-    {'name': 'Neha Gupta', 'email': 'neha.g@example.com', 'date': '28 Aug 2026', 'status': 'Verified'},
-  ];
-
-  final List<Map<String, dynamic>> _dummyLogins = [
-    {'name': 'Vikram Rathore', 'region': 'DL-01', 'status': 'Active Now', 'ip': '192.168.1.1', 'id': '45892'},
-    {'name': 'Amit Kumar', 'region': 'MH-02', 'status': 'Active 2m ago', 'ip': '192.168.1.5', 'id': '45889'},
-    {'name': 'Sneha Patel', 'region': 'GJ-01', 'status': 'Active Now', 'ip': '192.168.1.12', 'id': '45871'},
-    {'name': 'Rahul Verma', 'region': 'KA-05', 'status': 'Active 5m ago', 'ip': '192.168.1.20', 'id': '45860'},
-  ];
-
-  final List<Map<String, dynamic>> _dummyHistory = [
-    {'name': 'Vikram Rathore', 'action': 'updated KYC', 'time': 'Today, 10:30 AM', 'type': 'Success'},
-    {'name': 'Priya Sharma', 'action': 'logged in', 'time': 'Today, 09:15 AM', 'type': 'Session'},
-    {'name': 'Amit Kumar', 'action': 'placed bid on Audi Q5', 'time': 'Yesterday, 04:20 PM', 'type': 'Success'},
-    {'name': 'Rahul Verma', 'action': 'failed login attempt', 'time': 'Yesterday, 11:10 AM', 'type': 'Session'},
-    {'name': 'Neha Gupta', 'action': 'completed profile', 'time': '12 Sep, 02:45 PM', 'type': 'Success'},
-  ];
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,24 +34,30 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
       backgroundColor: const Color(0xFFF3F4F6),
       drawer: const AdminNavigationDrawer(),
       appBar: const AdminAppBar(),
-      body: Column(
-        children: [
-          _buildSectionHeader(),
-          _buildTabsRow(),
-          Expanded(
-            child: _buildTabContent(),
-          ),
-        ],
+      body: ListenableBuilder(
+        listenable: AdminClientsStore(),
+        builder: (context, _) {
+          return Column(
+            children: [
+              _buildSectionHeader(),
+              _buildTabsRow(),
+              Expanded(
+                child: _buildTabContent(),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildSectionHeader() {
+    final store = AdminClientsStore();
     String badgeText = '';
-    if (_activeTabIndex == 0) badgeText = '1,428 Total';
-    else if (_activeTabIndex == 1) badgeText = '342 Active';
-    else if (_activeTabIndex == 2) badgeText = '58 Logs';
-    else if (_activeTabIndex == 3) badgeText = '1,210 Complete';
+    if (_activeTabIndex == 0) badgeText = '${store.clients.length} Total';
+    else if (_activeTabIndex == 1) badgeText = '${store.activeLogins.length} Active';
+    else if (_activeTabIndex == 2) badgeText = '${store.history.length} Logs';
+    else if (_activeTabIndex == 3) badgeText = '${store.clients.where((c) => c['status'] == 'Verified').length} Complete';
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -178,20 +164,21 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
     Color badgeColor = Colors.grey.shade200;
     Color badgeTextColor = const Color(0xFF001128);
 
+    final store = AdminClientsStore();
     if (_activeTabIndex == 0) {
       title = 'All Registered Clients';
-      badgeText = '1,428 Total';
+      badgeText = '${store.clients.length} Total';
       badgeColor = const Color(0xFFfb7800);
       badgeTextColor = Colors.white;
     } else if (_activeTabIndex == 1) {
-      title = 'Active Logins (342)';
+      title = 'Active Logins (${store.activeLogins.length})';
       badgeText = 'Real-time';
     } else if (_activeTabIndex == 2) {
       title = 'Client Activity History';
       badgeText = 'Logs';
     } else if (_activeTabIndex == 3) {
       title = 'Profile-Completed Directory';
-      badgeText = '1,210 Complete';
+      badgeText = '${store.clients.where((c) => c['status'] == 'Verified').length} Complete';
       badgeColor = const Color(0xFFfb7800);
       badgeTextColor = Colors.white;
     }
@@ -259,8 +246,9 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
   }
 
   Widget _buildListContent() {
+    final store = AdminClientsStore();
     if (_activeTabIndex == 0 || _activeTabIndex == 3) {
-      var filtered = _dummyClients.where((c) {
+      var filtered = store.clients.where((c) {
         if (_activeTabIndex == 3 && c['status'] != 'Verified') return false; // simulated profile complete filter
         return c['name'].toLowerCase().contains(_searchQuery) || c['email'].toLowerCase().contains(_searchQuery);
       }).toList();
@@ -295,7 +283,7 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
         },
       );
     } else if (_activeTabIndex == 1) {
-      var filtered = _dummyLogins.where((c) {
+      var filtered = store.activeLogins.where((c) {
         return c['name'].toLowerCase().contains(_searchQuery);
       }).toList();
 
@@ -316,7 +304,7 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
         },
       );
     } else if (_activeTabIndex == 2) {
-      var filtered = _dummyHistory.where((c) {
+      var filtered = store.history.where((c) {
         return c['name'].toLowerCase().contains(_searchQuery) || c['action'].toLowerCase().contains(_searchQuery);
       }).toList();
 

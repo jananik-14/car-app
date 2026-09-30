@@ -7,7 +7,7 @@ import '../theme/app_theme.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../utils/responsive_helper.dart';
 import 'package:provider/provider.dart';
-import '../providers/watchlist_provider.dart';
+import '../utils/watchlist_store.dart';
 import 'filter_sort_screen.dart';
 
 class BrowseVehiclesScreen extends StatefulWidget {
@@ -33,6 +33,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
       'bid': '₹38.5 Lakhs',
       'bids_placed': '14',
       'time_left': '2h 14m',
+      'city': 'Delhi',
       'image': 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=400&q=80',
     },
     {
@@ -42,6 +43,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
       'bid': '₹34.2 Lakhs',
       'bids_placed': '8',
       'time_left': '4h 30m',
+      'city': 'Gurugram',
       'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=400&q=80',
     },
     {
@@ -51,6 +53,7 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
       'bid': '₹45.0 Lakhs',
       'bids_placed': '22',
       'time_left': '1h 45m',
+      'city': 'Mumbai',
       'image': 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=400&q=80',
     },
   ];
@@ -464,12 +467,13 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                 Positioned(
                   bottom: 12,
                   right: 12,
-                  child: Consumer<WatchlistProvider>(
-                    builder: (context, watchlist, child) {
-                      bool isSaved = watchlist.isSaved(vehicle['id']);
+                  child: ListenableBuilder(
+                    listenable: WatchlistStore(),
+                    builder: (context, child) {
+                      bool isSaved = WatchlistStore().isSaved(vehicle);
                       return GestureDetector(
                         onTap: () {
-                          watchlist.toggleVehicle(vehicle);
+                          WatchlistStore().toggleSave(vehicle);
                         },
                         child: Container(
                           width: 36,
@@ -512,6 +516,17 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        vehicle['city'] ?? 'Unknown Location',
+                        style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   Container(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/responsive_layout_wrapper.dart';
+import '../services/auth_service.dart';
 
 class TermsConditionsScreen extends StatefulWidget {
   const TermsConditionsScreen({super.key});
@@ -371,6 +372,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
           ElevatedButton(
             onPressed: _isAccepted
                 ? () {
+                    print('AUTH DEBUG: terms accepted, loggedIn=${AuthService().isLoggedIn}');
                     // Proceed to next screen
                     context.push('/browse');
                   }

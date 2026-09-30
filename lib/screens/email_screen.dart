@@ -32,8 +32,7 @@ class _EmailScreenState extends State<EmailScreen> {
       _errorMessage = null;
     });
 
-    // Save/update global state
-    currentSubscriptionPlan = widget.planName;
+    // Save/update global state handled elsewhere
 
     // Show success snackbar
     ScaffoldMessenger.of(context).showSnackBar(

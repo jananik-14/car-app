@@ -2,9 +2,15 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/local_listings_store.dart';
+import '../services/admin_notification_store.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../widgets/responsive_layout_wrapper.dart';
+import '../services/subscription_store.dart';
+import '../utils/profile_storage_helper.dart';
 
 class PostVehicleFormScreen extends StatefulWidget {
   final bool isEditMode;
@@ -66,6 +72,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   List<XFile> interiorDashImages = [];
   List<XFile> engineTyresImages = [];
   List<XFile> rcInsuranceImages = [];
+  PlatformFile? inspectionReportFile;
 
   @override
   Widget build(BuildContext context) {
@@ -80,26 +87,81 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   }
 
   Widget _buildBodyContent() {
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: SafeArea(
+    return ListenableBuilder(
+        listenable: SubscriptionStore(),
+        builder: (context, _) {
+          final store = SubscriptionStore();
+          if (!store.isActive) {
+            return _buildSubscriptionRequiredState(store.isPending);
+          }
+
+          return GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _buildProgressIndicator(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: _currentStep == 1
+                          ? _buildStep1()
+                          : _currentStep == 2
+                              ? _buildStep2()
+                              : _currentStep == 3
+                                  ? _buildStep3()
+                                  : _currentStep == 4
+                                      ? _buildStep4()
+                                      : _currentStep == 5
+                                          ? _buildStep5()
+                                          : _buildPlaceholderStep(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+  }
+
+  Widget _buildSubscriptionRequiredState(bool isPending) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildProgressIndicator(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: _currentStep == 1
-                    ? _buildStep1()
-                    : _currentStep == 2
-                        ? _buildStep2()
-                        : _currentStep == 3
-                            ? _buildStep3()
-                            : _currentStep == 4
-                                ? _buildStep4()
-                                : _currentStep == 5
-                                    ? _buildStep5()
-                                    : _buildPlaceholderStep(),
+            const Icon(Icons.lock_outline, size: 64, color: Color(0xFFFB7800)),
+            const SizedBox(height: 24),
+            const Text('Subscription required',
+                style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF001128))),
+            const SizedBox(height: 12),
+            Text(
+              isPending
+                  ? 'Your subscription is currently pending approval.'
+                  : 'You need an active subscription to post or sell vehicles.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: 250,
+              child: ElevatedButton(
+                onPressed: () => context.push('/subscription'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFB7800),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('View Plans',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -186,7 +248,8 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: MediaQuery.of(context).size.width < 400 ? 0.95 : 1.1,
+          childAspectRatio:
+              MediaQuery.of(context).size.width < 400 ? 0.95 : 1.1,
           children: [
             _buildVehicleTypeCard(
                 'Car / SUV', 'Sedan, Hatchback, SUV', Icons.directions_car),
@@ -1309,6 +1372,113 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
     );
   }
 
+  Future<void> _pickPdf() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      allowMultiple: false,
+      withData: true,
+    );
+    if (result != null) {
+      setState(() {
+        inspectionReportFile = result.files.first;
+      });
+    }
+  }
+
+  Widget _buildPdfCategoryBox() {
+    if (inspectionReportFile != null) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green),
+        ),
+        child: Stack(
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.picture_as_pdf, color: Colors.green, size: 28),
+                const SizedBox(height: 4),
+                Text(
+                  inspectionReportFile!.name,
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: navyBlue,
+                      fontSize: 10),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(4)),
+                  child: const Text('✓ Uploaded',
+                      style: TextStyle(color: Colors.white, fontSize: 8)),
+                ),
+              ],
+            ),
+            Positioned(
+              top: -4,
+              right: -4,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    inspectionReportFile = null;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: _pickPdf,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border:
+              Border.all(color: Colors.grey[300]!, style: BorderStyle.solid),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.picture_as_pdf, color: Colors.grey, size: 28),
+            const SizedBox(height: 4),
+            Text(
+              'Inspection Report',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: navyBlue, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            const Text('Upload PDF (Optional)',
+                style: TextStyle(color: Colors.grey, fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildStep4() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1345,7 +1515,8 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: MediaQuery.of(context).size.width < 400 ? 0.95 : 1.1,
+          childAspectRatio:
+              MediaQuery.of(context).size.width < 400 ? 0.95 : 1.1,
           children: [
             _buildImageCategoryBox(
                 'Front View', Icons.directions_car_outlined, frontViewImages),
@@ -1357,8 +1528,9 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                 interiorDashImages),
             _buildImageCategoryBox(
                 'Engine & Tyres', Icons.build_outlined, engineTyresImages),
-            _buildImageCategoryBox('RC & Insurance', Icons.description_outlined,
-                rcInsuranceImages),
+            _buildImageCategoryBox(
+                'RC', Icons.description_outlined, rcInsuranceImages),
+            _buildPdfCategoryBox(),
           ],
         ),
         const SizedBox(height: 32),
@@ -1614,41 +1786,6 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 24),
 
-        // AI Valuation Info
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue[100]!),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.auto_awesome, color: Colors.blue[700], size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('AI Market Valuation',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: navyBlue,
-                            fontSize: 14)),
-                    const SizedBox(height: 4),
-                    const Text(
-                        'Estimated market value: ₹5,40,000 - ₹6,10,000 based on recent verified Indian bids in your RTO zone.',
-                        style: TextStyle(
-                            color: Colors.grey, fontSize: 12, height: 1.4)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 32),
-
         // Reserve Price Toggle
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1757,10 +1894,38 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              if (!SubscriptionStore().isActive) {
+                _showSubscriptionExpiredDialog();
+                return;
+              }
               if (widget.isEditMode) {
                 context.pop(true);
               } else {
+                final phone = AuthService().currentPhone;
+                final normalizedPhone = ProfileStorageHelper.normalizePhone(phone!);
+                final prefs = await SharedPreferences.getInstance();
+                final realName = prefs.getString('user_name_$normalizedPhone') ?? 'Unknown Seller';
+
+                LocalListingsStore().addListing({
+                  'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                  'title': 'Vehicle Title',
+                  'price': '₹15.0 L',
+                  'sellerName': realName,
+                  'location': 'Mumbai',
+                  'stateCode': 'MH-01',
+                  'timeAgo': 'Just now',
+                  'type': 'Dealer',
+                  'rcStatus': 'Clear',
+                  'inspection': '4.5 / 5.0',
+                  'imageUrl':
+                      'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=300&q=80',
+                  'tag': 'New',
+                  'inspectionReportBytes': inspectionReportFile?.bytes,
+                });
+                AdminNotificationStore().addNotification(
+                    'New listing submitted: Vehicle Title by $realName — awaiting approval',
+                    'listing');
                 context.push('/confirmation/listing');
               }
             },
@@ -1907,14 +2072,40 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             const SizedBox(width: 16),
             Expanded(
               child: ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    if (_currentStep < _totalSteps) {
+                onPressed: () async {
+                  if (_currentStep < _totalSteps) {
+                    setState(() {
                       _currentStep++;
-                    } else {
+                    });
+                  } else {
+                    final phone = AuthService().currentPhone;
+                    final realName = await ProfileStorageHelper.getProfileField(phone ?? '', 'user_name') ?? 
+                        (phone != null && phone.isNotEmpty ? phone : 'Unknown Seller');
+
+                    LocalListingsStore().addListing({
+                      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                      'title': 'Vehicle Title',
+                      'price': '₹15.0 L',
+                      'sellerName': realName,
+                      'phone': phone,
+                      'location': 'Mumbai',
+                      'stateCode': 'MH-01',
+                      'timeAgo': 'Just now',
+                      'type': 'Dealer',
+                      'rcStatus': 'Clear',
+                      'inspection': '4.5 / 5.0',
+                      'imageUrl':
+                          'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=300&q=80',
+                      'tag': 'New',
+                      'inspectionReportBytes': inspectionReportFile?.bytes,
+                    });
+                    AdminNotificationStore().addNotification(
+                        'New listing submitted: Vehicle Title by $realName — awaiting approval',
+                        'listing');
+                    if (mounted) {
                       context.push('/confirmation/listing');
                     }
-                  });
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: orange,
@@ -1931,6 +2122,41 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           ],
         ),
       ],
+    );
+  }
+
+  void _showSubscriptionExpiredDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFFB7800)),
+            SizedBox(width: 8),
+            Text('Subscription Expired'),
+          ],
+        ),
+        content: const Text(
+            'Your subscription has expired. You need an active subscription to publish this listing.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.push('/subscription');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFB7800),
+            ),
+            child:
+                const Text('View Plans', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 }

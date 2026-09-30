@@ -1,76 +1,86 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../widgets/responsive_nav_scaffold.dart';
-import '../services/auth_service.dart';
 import '../utils/responsive_helper.dart';
-import '../utils/global_store.dart';
-
-// Simple global state for demonstration purposes
-String currentSubscriptionPlan = 'Starter';
+import '../utils/logout_helper.dart';
+import '../services/subscription_store.dart';
+import '../config/subscription_plans.dart';
 
 class SubscriptionPlansScreen extends StatefulWidget {
   const SubscriptionPlansScreen({super.key});
 
   @override
-  State<SubscriptionPlansScreen> createState() =>
-      _SubscriptionPlansScreenState();
+  State<SubscriptionPlansScreen> createState() => _SubscriptionPlansScreenState();
 }
 
 class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
+  String _formatAmount(int amount) {
+    return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(amount);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scrollableContent = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildTopBar(),
-        _buildTrustBadge(),
-        _buildHeading(),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: ResponsiveHelper.isDesktop(context)
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return ListenableBuilder(
+      listenable: SubscriptionStore(),
+      builder: (context, _) {
+        final scrollableContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildTopBar(),
+            _buildStatusBanner(),
+            _buildTrustBadge(),
+            _buildHeading(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: ResponsiveHelper.isDesktop(context)
+                  ? IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _buildPlanCard(SubscriptionPlans.plans[0])),
+                          const SizedBox(width: 16),
+                          Expanded(child: _buildPlanCard(SubscriptionPlans.plans[1])),
+                          const SizedBox(width: 16),
+                          Expanded(child: _buildPlanCard(SubscriptionPlans.plans[2])),
+                        ],
+                      ),
+                    )
+                  : Column(
+                      children: [
+                        _buildPlanCard(SubscriptionPlans.plans[0]),
+                        const SizedBox(height: 16),
+                        _buildPlanCard(SubscriptionPlans.plans[1]),
+                        const SizedBox(height: 16),
+                        _buildPlanCard(SubscriptionPlans.plans[2]),
+                        const SizedBox(height: 24),
+                        _buildFooterNote(),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+            ),
+            if (ResponsiveHelper.isDesktop(context))
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Column(
                   children: [
-                    Expanded(child: _buildStarterPlan()),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildProTraderPlan()),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildDealershipElitePlan()),
-                  ],
-                )
-              : Column(
-                  children: [
-                    _buildStarterPlan(),
-                    const SizedBox(height: 16),
-                    _buildProTraderPlan(),
-                    const SizedBox(height: 16),
-                    _buildDealershipElitePlan(),
                     const SizedBox(height: 24),
                     _buildFooterNote(),
                     const SizedBox(height: 32),
                   ],
                 ),
-        ),
-        if (ResponsiveHelper.isDesktop(context))
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              children: [
-                const SizedBox(height: 24),
-                _buildFooterNote(),
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-      ],
-    );
+              ),
+          ],
+        );
 
-    return ResponsiveNavScaffold(
-      currentIndex: 4,
-      body: SingleChildScrollView(
-        child: scrollableContent,
-      ),
+        return ResponsiveNavScaffold(
+          currentIndex: 4,
+          body: SingleChildScrollView(
+            child: scrollableContent,
+          ),
+        );
+      }
     );
   }
 
@@ -80,14 +90,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            'Profile',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
-            ),
-          ),
+          const Text('Profile', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary)),
           Theme(
             data: Theme.of(context).copyWith(
               splashColor: const Color(0xFFFB7800).withValues(alpha: 0.1),
@@ -96,84 +99,59 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
             ),
             child: PopupMenuButton<String>(
               offset: const Offset(0, 50),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               color: Colors.white,
               elevation: 4,
               onSelected: (value) {
-                if (value == 'activity') {
-                  context.push('/my_activity');
-                } else if (value == 'edit_profile') {
-                  context.push('/profile_edit');
-                } else if (value == 'help') {
-                  context.push('/help_support');
-                } else if (value == 'logout') {
-                  _showLogoutDialog(context);
+                if (value == 'activity') context.push('/my_activity');
+                else if (value == 'edit_profile') context.push('/profile_edit');
+                else if (value == 'help') context.push('/help_support');
+                else if (value == 'logout') {
+                   confirmAndLogout(context);
                 }
               },
               itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                PopupMenuItem<String>(
-                  value: 'activity',
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.history, color: AppColors.primary),
-                      SizedBox(width: 12),
-                      Text('My Activity',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.primary)),
-                    ],
-                  ),
-                ),
-                PopupMenuItem<String>(
+                const PopupMenuItem<String>(
                   value: 'edit_profile',
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   child: Row(
-                    children: const [
-                      Icon(Icons.person_outline, color: AppColors.primary),
+                    children: [
+                      Icon(Icons.person, color: Color(0xFF001128)),
                       SizedBox(width: 12),
-                      Text('Edit My Profile',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.primary)),
+                      Text('Edit my profile', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF001128))),
                     ],
                   ),
                 ),
-                PopupMenuItem<String>(
+                const PopupMenuItem<String>(
+                  value: 'activity',
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.history, color: Color(0xFF001128)),
+                      SizedBox(width: 12),
+                      Text('My activity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF001128))),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
                   value: 'help',
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   child: Row(
-                    children: const [
-                      Icon(Icons.help_outline, color: AppColors.primary),
+                    children: [
+                      Icon(Icons.help_outline, color: Color(0xFF001128)),
                       SizedBox(width: 12),
-                      Text('Help & Support',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.primary)),
+                      Text('Help and support', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF001128))),
                     ],
                   ),
                 ),
-                const PopupMenuDivider(height: 1),
-                PopupMenuItem<String>(
+                const PopupMenuItem<String>(
                   value: 'logout',
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   child: Row(
-                    children: const [
+                    children: [
                       Icon(Icons.logout, color: Color(0xFFFB7800)),
                       SizedBox(width: 12),
-                      Text('Logout',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFFFB7800))),
+                      Text('Logout', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFFFB7800))),
                     ],
                   ),
                 ),
@@ -181,18 +159,73 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
               child: Container(
                 width: 40,
                 height: 40,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.white,
-                  size: 24,
-                ),
+                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                child: const Icon(Icons.person, color: Colors.white, size: 24),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBanner() {
+    final store = SubscriptionStore();
+    Color bgColor;
+    Color textColor;
+    String message;
+    IconData icon;
+
+    if (store.isActive && store.endDate != null) {
+      if (store.daysLeft <= 0) {
+        bgColor = Colors.red.shade50;
+        textColor = Colors.red.shade800;
+        message = 'Your subscription has expired. Please renew to keep bidding.';
+        icon = Icons.error_outline;
+      } else if (store.daysLeft <= 7) {
+        bgColor = Colors.amber.shade100;
+        textColor = Colors.amber.shade900;
+        message = 'Your plan expires in ${store.daysLeft} days. Renew to keep bidding.';
+        icon = Icons.warning_amber_rounded;
+      } else {
+        bgColor = Colors.green.shade50;
+        textColor = Colors.green.shade800;
+        final dateFormat = DateFormat('dd MMM yyyy');
+        final endStr = store.endDate != null ? dateFormat.format(store.endDate!) : '';
+        message = 'Active: ${store.activePlan?.name ?? ''} • Valid till $endStr • ${store.daysLeft} days left';
+        icon = Icons.check_circle_outline;
+      }
+    } else if (store.isActive && store.endDate == null) {
+      // Admin case or permanent active
+      bgColor = Colors.green.shade50;
+      textColor = Colors.green.shade800;
+      message = 'Active: Admin Access (Unlimited)';
+      icon = Icons.check_circle_outline;
+    } else if (store.isPending) {
+      bgColor = Colors.blue.shade50;
+      textColor = Colors.blue.shade800;
+      message = 'Subscription pending approval. You\'ll be able to bid once it is approved.';
+      icon = Icons.hourglass_empty;
+    } else {
+      bgColor = Colors.red.shade50;
+      textColor = Colors.red.shade800;
+      message = 'No active subscription. Subscribe to place bids and post vehicles.';
+      icon = Icons.error_outline;
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: textColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: textColor),
+          const SizedBox(width: 12),
+          Expanded(child: Text(message, style: TextStyle(color: textColor, fontWeight: FontWeight.w600))),
         ],
       ),
     );
@@ -212,18 +245,9 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: const [
-              Icon(Icons.verified,
-                  color: AppColors.secondaryContainer, size: 14),
+              Icon(Icons.verified, color: AppColors.secondaryContainer, size: 14),
               SizedBox(width: 6),
-              Text(
-                'TRUSTED BY 25,000+ DEALERS',
-                style: TextStyle(
-                  color: AppColors.secondaryContainer,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
+              Text('TRUSTED BY 25,000+ DEALERS', style: TextStyle(color: AppColors.secondaryContainer, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
             ],
           ),
         ),
@@ -237,172 +261,46 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
-          Text(
-            'Bidder Memberships',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
-            ),
-          ),
+          Text('Bidder Memberships', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.primary)),
           SizedBox(height: 4),
-          Text(
-            'Choose your auction access plan',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.outline,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          Text('Choose your auction access plan', style: TextStyle(fontSize: 14, color: AppColors.outline, fontWeight: FontWeight.w500)),
         ],
       ),
     );
   }
 
-  Widget _buildStarterPlan() {
-    final isCurrent = currentSubscriptionPlan == 'Starter';
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'PLAN',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.outline,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Starter',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0F2F6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.directions_car,
-                      color: AppColors.primary, size: 20),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: const [
-                Text(
-                  '₹0',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.primary,
-                  ),
-                ),
-                Text(
-                  '/month',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.outline,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildChecklist(
-                ['3 Live Bids/month', 'Standard support'], AppColors.primary),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: isCurrent ? null : () => _handleSubscribe('Starter'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      AppColors.primaryContainer.withValues(alpha: 0.1),
-                  foregroundColor: AppColors.primaryContainer,
-                  disabledBackgroundColor: const Color(0xFFEEF1F7),
-                  disabledForegroundColor: AppColors.outline,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  isCurrent ? 'Current Plan' : 'Select Starter',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _buildPlanCard(SubscriptionPlan plan) {
+    final store = SubscriptionStore();
+    final isCurrent = store.activePlan?.id == plan.id && store.isActive;
+    final isPending = store.isPending;
+    
+    final bool isBestValue = plan.id == 'yearly';
+    final Color mainColor = isBestValue ? AppColors.secondaryContainer : AppColors.primary;
 
-  Widget _buildProTraderPlan() {
-    final isCurrent = currentSubscriptionPlan == 'Pro Trader';
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: AppColors.secondaryContainer.withValues(alpha: 0.5),
-            width: 1.5),
+        border: Border.all(color: isBestValue ? mainColor.withOpacity(0.5) : AppColors.outlineVariant.withOpacity(0.3), width: isBestValue ? 1.5 : 1.0),
         boxShadow: [
           BoxShadow(
-            color: AppColors.secondaryContainer.withValues(alpha: 0.1),
+            color: isBestValue ? mainColor.withOpacity(0.1) : Colors.black.withOpacity(0.03),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          Container(
-            height: 4,
-            color: AppColors.secondaryContainer,
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 380),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+          if (isBestValue) Container(height: 4, color: mainColor),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
@@ -412,53 +310,25 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondaryContainer
-                                .withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
+                        if (plan.tagline.isNotEmpty)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: mainColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isBestValue) const Icon(Icons.star, color: AppColors.secondaryContainer, size: 10),
+                                if (isBestValue) const SizedBox(width: 4),
+                                Text(plan.tagline, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: mainColor, letterSpacing: 0.5)),
+                              ],
+                            ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.star,
-                                  color: AppColors.secondaryContainer,
-                                  size: 10),
-                              SizedBox(width: 4),
-                              Text(
-                                'RECOMMENDED',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.secondaryContainer,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Pro Trader',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
+                        Text(plan.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
                       ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color:
-                            AppColors.secondaryContainer.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.bolt,
-                          color: AppColors.secondaryContainer, size: 20),
                     ),
                   ],
                 ),
@@ -466,203 +336,52 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
-                  children: const [
-                    Text(
-                      '₹1,999',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    Text(
-                      '/mo',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.outline,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                  children: [
+                    Text(_formatAmount(plan.price), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: AppColors.primary)),
+                    Text('/${plan.name.toLowerCase()}', style: const TextStyle(fontSize: 14, color: AppColors.outline, fontWeight: FontWeight.w500)),
                   ],
                 ),
+                if (plan.durationDays > 30)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('≈ ${_formatAmount((plan.price / (plan.durationDays / 30)).round())}/month', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  ),
                 const SizedBox(height: 12),
-                _buildChecklist([
-                  'Unlimited Bids',
-                  'Instant RTO verification',
-                  'Priority lot alerts'
-                ], AppColors.secondaryContainer),
+                _buildChecklist(plan.features, mainColor),
+                const Spacer(),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed:
-                        isCurrent ? null : () => _handleSubscribe('Pro Trader'),
+                    onPressed: isPending ? null : () => _handleSubscribe(plan.id),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.secondaryContainer,
-                      foregroundColor: Colors.white,
+                      backgroundColor: isCurrent ? Colors.white : mainColor,
+                      foregroundColor: isCurrent ? mainColor : Colors.white,
                       disabledBackgroundColor: const Color(0xFFEEF1F7),
                       disabledForegroundColor: AppColors.outline,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
+                        side: isCurrent ? BorderSide(color: mainColor) : BorderSide.none,
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          isCurrent ? 'Current Plan' : 'Upgrade to Pro',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (!isCurrent) ...[
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward, size: 18),
-                        ],
-                      ],
+                    child: Text(
+                      isPending ? 'Pending Approval' : (isCurrent ? 'Renew Plan' : (store.isActive ? 'Switch to this plan' : 'Choose Plan')),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
               ],
             ),
           ),
+          ),
         ],
       ),
+    ),
     );
   }
 
-  Widget _buildDealershipElitePlan() {
-    final isCurrent = currentSubscriptionPlan == 'Dealership Elite';
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'COMMERCIAL',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.outline,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Dealership Elite',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0F2F6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.business_center,
-                      color: AppColors.primary, size: 20),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: const [
-                Text(
-                  '₹4,999',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.primary,
-                  ),
-                ),
-                Text(
-                  '/mo',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.outline,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildChecklist([
-              'Zero transaction fees',
-              'Dedicated Account Manager',
-              'API Access for bulk bidding'
-            ], AppColors.primary),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: isCurrent
-                    ? null
-                    : () => _handleSubscribe('Dealership Elite'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: const Color(0xFFEEF1F7),
-                  disabledForegroundColor: AppColors.outline,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      isCurrent ? 'Current Plan' : 'Contact Sales',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (!isCurrent) ...[
-                      const SizedBox(width: 8),
-                      const Icon(Icons.headset_mic, size: 18),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildChecklist(List<String> items, Color iconColor) {
     return Column(
@@ -673,12 +392,10 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
             children: [
               Icon(Icons.check_circle, color: iconColor, size: 20),
               const SizedBox(width: 12),
-              Text(
-                item,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                child: Text(
+                  item,
+                  style: const TextStyle(fontSize: 14, color: AppColors.onSurfaceVariant, fontWeight: FontWeight.w500),
                 ),
               ),
             ],
@@ -691,10 +408,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
   Widget _buildFooterNote() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEEF1F7),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFEEF1F7), borderRadius: BorderRadius.circular(12)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
@@ -703,11 +417,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           Expanded(
             child: Text(
               '100% Tax Deductible Invoicing - GST receipts generated immediately. Upgrade or cancel anytime from account settings.',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceVariant,
-                height: 1.4,
-              ),
+              style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant, height: 1.4),
             ),
           ),
         ],
@@ -715,115 +425,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     );
   }
 
-  void _handleSubscribe(String planId) async {
-    final emailController = TextEditingController();
-    emailController.text = 'user@example.com'; // Simulate saved email
-    
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Confirm your email to proceed', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-          content: TextField(
-            controller: emailController,
-            decoration: InputDecoration(
-              labelText: 'Email Address',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel', style: TextStyle(color: AppColors.outline)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Confirm & Send Request'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == true) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Upgrade request sent! We\'ll notify you once approved.'),
-            backgroundColor: Color(0xFFFB7800),
-          ),
-        );
-      }
-      
-      // We will integrate GlobalStore for Notifications and Admin Subscriptions later
-      importGlobalStoreAndAddData(planId);
-    }
-  }
-
-  void importGlobalStoreAndAddData(String planId) {
-    GlobalStore.notifications.insert(0, {
-      'iconData': Icons.pending_actions,
-      'iconColor': Colors.white,
-      'iconBgColor': const Color(0xFFFB7800),
-      'title': 'Upgrade request submitted for ',
-      'boldHighlight': planId,
-      'highlightColor': const Color(0xFFFB7800),
-      'content': '. Awaiting approval.',
-      'time': 'Just now',
-      'showDot': true,
-      'dotColor': const Color(0xFFFB7800),
-    });
-
-    GlobalStore.pendingSubscriptions.insert(0, {
-      'id': 's_new_${DateTime.now().millisecondsSinceEpoch}',
-      'businessName': 'Your Dealership', // Placeholder since user profile name isn't fully wired here
-      'tier': planId,
-      'tierColor': planId == 'Pro Trader' ? AppColors.secondaryContainer : AppColors.primary,
-      'id1Label': 'GSTIN',
-      'id1Value': 'PENDING',
-      'id2Label': 'PAN',
-      'id2Value': 'PENDING',
-      'requestTime': 'Just now',
-      'timeAgo': 'Just now',
-      'price': 'N/A',
-      'payRef': 'Pending',
-      'paymentStatus': 'Awaiting Verification',
-      'gstStatus': 'N/A',
-      'kycDocs': 'Not Attached',
-    });
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Logout'),
-          content: const Text('Are you sure you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() {
-                  AuthService.currentUserRole = 'customer';
-                });
-                context.go('/login');
-              },
-              child: const Text('Logout'),
-            ),
-          ],
-        );
-      },
-    );
+  void _handleSubscribe(String planId) {
+    context.push('/subscription_checkout?planId=$planId');
   }
 }

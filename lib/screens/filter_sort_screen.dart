@@ -23,8 +23,6 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
   String _selectedTransmission = 'Automatic';
   final Set<String> _selectedBodyTypes = {'Sedan'};
   final Set<String> _selectedStates = {'All India'};
-  bool _is140PtCertified = true;
-  bool _isNonAccidental = true;
   String? _selectedPricePill;
 
   @override
@@ -57,8 +55,6 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
                       _buildBodyTypeSection(),
                       const Divider(height: 1, thickness: 8, color: lightBlueGrey),
                       _buildStateHubSection(),
-                      const Divider(height: 1, thickness: 8, color: lightBlueGrey),
-                      _buildTrustVerificationSection(),
                       const SizedBox(height: 100), // Padding for bottom bar
                     ],
                   ),
@@ -95,8 +91,6 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
                       _buildBodyTypeSection(),
                       const Divider(height: 1, thickness: 8, color: lightBlueGrey),
                       _buildStateHubSection(),
-                      const Divider(height: 1, thickness: 8, color: lightBlueGrey),
-                      _buildTrustVerificationSection(),
                       const SizedBox(height: 100),
                     ],
                   ),
@@ -207,8 +201,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
                 _selectedTransmission = '';
                 _selectedBodyTypes.clear();
                 _selectedStates.clear();
-                _is140PtCertified = false;
-                _isNonAccidental = false;
+                _selectedStates.add('All India');
               });
             },
             child: Container(
@@ -239,7 +232,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
   }
 
   Widget _buildCategoryTabs() {
-    final tabs = ['All', 'Cars', 'Bikes/Scooters Commercial'];
+    final tabs = ['All', 'Cars', 'Two Wheelers','Commercial'];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -400,7 +393,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSectionHeader(
-            title: 'Bid / Price Range',
+            title: 'Price Range',
             icon: Icons.monetization_on_outlined,
             trailing: Text(
               'Pan-India Base',
@@ -643,8 +636,8 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
     final bodyTypes = [
       {'name': 'SUV / Compact', 'icon': Icons.directions_car_filled},
       {'name': 'Sedan', 'icon': Icons.directions_car},
-      {'name': 'Hatchback', 'icon': Icons.airport_shuttle},
-      {'name': 'MUV / 7-Seater', 'icon': Icons.directions_bus},
+      {'name': 'Hatchback', 'icon': Icons.time_to_leave},
+      {'name': 'MUV / 7-Seater', 'icon': Icons.airport_shuttle},
       {'name': 'Cruiser Bike', 'icon': Icons.two_wheeler},
       {'name': 'Commuter / EV', 'icon': Icons.electric_bike},
     ];
@@ -757,8 +750,20 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
               return GestureDetector(
                 onTap: () {
                   setState(() {
-                    _selectedStates.clear();
-                    _selectedStates.add(state);
+                    if (state == 'All India') {
+                      _selectedStates.clear();
+                      _selectedStates.add('All India');
+                    } else {
+                      _selectedStates.remove('All India');
+                      if (_selectedStates.contains(state)) {
+                        _selectedStates.remove(state);
+                      } else {
+                        _selectedStates.add(state);
+                      }
+                      if (_selectedStates.isEmpty) {
+                        _selectedStates.add('All India');
+                      }
+                    }
                   });
                 },
                 child: Container(
@@ -794,98 +799,6 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
     );
   }
 
-  Widget _buildTrustVerificationSection() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader(
-            title: 'Trust & Verification',
-            icon: Icons.verified_user_outlined,
-          ),
-          const SizedBox(height: 16),
-          _buildToggleRow(
-            title: '140-Point Certified Lots',
-            subtitle: 'Engine, chassis, and electronic health pass',
-            value: _is140PtCertified,
-            badge: 'Top 5%',
-            onChanged: (val) => setState(() => _is140PtCertified = val),
-          ),
-          const SizedBox(height: 16),
-          _buildToggleRow(
-            title: 'No Accidental History',
-            subtitle: 'Zero structural claim records',
-            value: _isNonAccidental,
-            onChanged: (val) => setState(() => _isNonAccidental = val),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToggleRow({
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-    String? badge,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(Icons.shield_outlined, color: Colors.grey.shade600, size: 24),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: navyBlue,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  if (badge != null) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: orange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        badge,
-                        style: const TextStyle(color: orange, fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ]
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeColor: Colors.white,
-          activeTrackColor: orange,
-          inactiveThumbColor: Colors.white,
-          inactiveTrackColor: Colors.grey.shade300,
-        ),
-      ],
-    );
-  }
-
   Widget _buildBottomBar() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -913,8 +826,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
                   _selectedTransmission = '';
                   _selectedBodyTypes.clear();
                   _selectedStates.clear();
-                  _is140PtCertified = false;
-                  _isNonAccidental = false;
+                  _selectedStates.add('All India');
                 });
               },
               child: const Padding(
