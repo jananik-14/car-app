@@ -39,8 +39,8 @@ class CustomNetworkImage extends StatelessWidget {
         );
       },
       errorBuilder: (context, error, stackTrace) {
-        if (this.errorBuilder != null) {
-          return this.errorBuilder!(context, error, stackTrace);
+        if (errorBuilder != null) {
+          return errorBuilder!(context, error, stackTrace);
         }
         return Container(
           width: width,

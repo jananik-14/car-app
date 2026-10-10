@@ -4,6 +4,7 @@ import '../widgets/responsive_layout_wrapper.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_api.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,9 +17,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _mobileController = TextEditingController();
   bool _showError = false;
 
-  bool get isPhoneValid => _mobileController.text.trim().length == 10 && RegExp(r'^[0-9]{10}$').hasMatch(_mobileController.text.trim());
+  bool get isPhoneValid => _mobileController.text.trim().length == 10 && RegExp(r'^[6-9][0-9]{9}$').hasMatch(_mobileController.text.trim());
 
-  void _getOtp() {
+  void _getOtp() async {
     if (!isPhoneValid) {
       setState(() {
         _showError = true;
@@ -29,6 +30,8 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError = false;
     });
     // Navigate to OTP screen
+    await AuthApi.sendOtp(_mobileController.text);
+    if (!mounted) return;
     context.push('/otp', extra: _mobileController.text);
   }
 
@@ -55,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: AppColors.surfaceContainerLowest,
                     borderRadius: BorderRadius.circular(32),
                     border: Border.all(
-                      color: AppColors.outlineVariant.withOpacity(0.6),
+                      color: AppColors.outlineVariant.withValues(alpha: 0.6),
                     ),
                   ),
                   child: ClipRRect(
@@ -166,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppColors.onSurfaceVariant,
                         ),
-                    children: [
+                    children: const [
                       TextSpan(
                         text: 'Terms of Service',
                         style: TextStyle(
@@ -175,7 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: TextDecoration.underline,
                         ),
                       ),
-                      const TextSpan(text: ' & '),
+                      TextSpan(text: ' & '),
                       TextSpan(
                         text: 'Privacy Policy',
                         style: TextStyle(
@@ -225,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 12),
       width: 4,
       height: 4,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: AppColors.outlineVariant,
         shape: BoxShape.circle,
       ),

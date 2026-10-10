@@ -120,7 +120,7 @@ class _UpiPaymentSectionState extends State<UpiPaymentSection> {
               IconButton(
                 icon: const Icon(Icons.copy, size: 16, color: Colors.grey),
                 onPressed: () {
-                  Clipboard.setData(ClipboardData(text: PaymentConfig.upiId));
+                  Clipboard.setData(const ClipboardData(text: PaymentConfig.upiId));
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('UPI ID Copied!'), duration: Duration(seconds: 1)));
                 },
               ),

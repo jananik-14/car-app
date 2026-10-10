@@ -17,7 +17,7 @@ class HelpSupportScreen extends StatelessWidget {
     },
     {
       'question': 'How does vehicle inspection work?',
-      'answer': 'Every vehicle on Wheels2Drive goes through a rigorous 140-point inspection by certified mechanics. You can view the detailed inspection report on the vehicle details page before placing a bid.',
+      'answer': 'Every vehicle on Wheels2Drive goes through a rigorous inspection by certified mechanics. You can view the detailed inspection report on the vehicle details page before placing a bid.',
     },
     {
       'question': 'How do I list my vehicle?',

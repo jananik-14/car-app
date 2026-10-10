@@ -103,8 +103,9 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
               color: Colors.white,
               elevation: 4,
               onSelected: (value) {
-                if (value == 'activity') context.push('/my_activity');
-                else if (value == 'edit_profile') context.push('/profile_edit');
+                if (value == 'activity') {
+                  context.push('/my_activity');
+                } else if (value == 'edit_profile') context.push('/profile_edit');
                 else if (value == 'help') context.push('/help_support');
                 else if (value == 'logout') {
                    confirmAndLogout(context);
@@ -219,7 +220,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: textColor.withOpacity(0.3)),
+        border: Border.all(color: textColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -242,9 +243,9 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
             color: AppColors.secondaryContainer.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Row(
+          child: const Row(
             mainAxisSize: MainAxisSize.min,
-            children: const [
+            children: [
               Icon(Icons.verified, color: AppColors.secondaryContainer, size: 14),
               SizedBox(width: 6),
               Text('TRUSTED BY 25,000+ DEALERS', style: TextStyle(color: AppColors.secondaryContainer, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
@@ -256,11 +257,11 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
   }
 
   Widget _buildHeading() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(24, 8, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           Text('Bidder Memberships', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.primary)),
           SizedBox(height: 4),
           Text('Choose your auction access plan', style: TextStyle(fontSize: 14, color: AppColors.outline, fontWeight: FontWeight.w500)),
@@ -281,10 +282,10 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isBestValue ? mainColor.withOpacity(0.5) : AppColors.outlineVariant.withOpacity(0.3), width: isBestValue ? 1.5 : 1.0),
+        border: Border.all(color: isBestValue ? mainColor.withValues(alpha: 0.5) : AppColors.outlineVariant.withValues(alpha: 0.3), width: isBestValue ? 1.5 : 1.0),
         boxShadow: [
           BoxShadow(
-            color: isBestValue ? mainColor.withOpacity(0.1) : Colors.black.withOpacity(0.03),
+            color: isBestValue ? mainColor.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.03),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -315,7 +316,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: mainColor.withOpacity(0.15),
+                              color: mainColor.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Row(
@@ -409,9 +410,9 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: const Color(0xFFEEF1F7), borderRadius: BorderRadius.circular(12)),
-      child: Row(
+      child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           Icon(Icons.receipt_long, color: AppColors.primary, size: 20),
           SizedBox(width: 12),
           Expanded(

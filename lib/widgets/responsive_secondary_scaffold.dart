@@ -11,6 +11,7 @@ class ResponsiveSecondaryScaffold extends StatelessWidget {
   final PreferredSizeWidget? appBar;
   final Color? backgroundColor;
   final Widget? bottomNavigationBar;
+  final bool fullWidth;
 
   const ResponsiveSecondaryScaffold({
     super.key,
@@ -19,6 +20,7 @@ class ResponsiveSecondaryScaffold extends StatelessWidget {
     this.appBar,
     this.backgroundColor,
     this.bottomNavigationBar,
+    this.fullWidth = false,
   });
 
   void _onDestinationSelected(BuildContext context, int index) async {
@@ -73,6 +75,7 @@ class ResponsiveSecondaryScaffold extends StatelessWidget {
       return Scaffold(
         backgroundColor: backgroundColor ?? Theme.of(context).colorScheme.surface,
         body: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AppSidebar(
               currentIndex: currentIndex,
@@ -81,18 +84,35 @@ class ResponsiveSecondaryScaffold extends StatelessWidget {
             ),
             Expanded(
               child: SingleChildScrollView(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 900),
-                    child: Column(
-                      children: [
-                        if (appBar != null) appBar!,
-                        child,
-                        if (bottomNavigationBar != null) bottomNavigationBar!,
-                      ],
+                child: fullWidth
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (appBar != null && !fullWidth)
+                            MediaQuery.removePadding(
+                              context: context,
+                              removeTop: true,
+                              child: appBar!,
+                            ),
+                          child,
+                          if (bottomNavigationBar != null) bottomNavigationBar!,
+                        ],
+                      ),
+                    )
+                  : Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 900),
+                        child: Column(
+                          children: [
+                            if (appBar != null) appBar!,
+                            child,
+                            if (bottomNavigationBar != null) bottomNavigationBar!,
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
               ),
             ),
           ],
@@ -102,7 +122,12 @@ class ResponsiveSecondaryScaffold extends StatelessWidget {
       return Scaffold(
         backgroundColor: backgroundColor ?? Theme.of(context).colorScheme.surface,
         appBar: appBar,
-        body: child,
+        body: fullWidth 
+          ? Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: child,
+            ) 
+          : child,
         bottomNavigationBar: bottomNavigationBar,
       );
     }

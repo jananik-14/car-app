@@ -1,19 +1,17 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../theme/app_theme.dart';
 
 class KycUploadField extends StatefulWidget {
-  final XFile? initialDocument;
+  final String? initialFileName;
   final Uint8List? initialDocumentBytes;
-  final bool initialIsUploaded;
-  final void Function(XFile? file, Uint8List? bytes) onChanged;
+  final void Function(String? fileName, Uint8List? bytes) onChanged;
 
   const KycUploadField({
     super.key,
-    this.initialDocument,
+    this.initialFileName,
     this.initialDocumentBytes,
-    this.initialIsUploaded = false,
     required this.onChanged,
   });
 
@@ -22,35 +20,48 @@ class KycUploadField extends StatefulWidget {
 }
 
 class _KycUploadFieldState extends State<KycUploadField> {
-  final ImagePicker _picker = ImagePicker();
-  XFile? _document;
+  String? _fileName;
   Uint8List? _documentBytes;
   bool _isUploaded = false;
 
   @override
   void initState() {
     super.initState();
-    _document = widget.initialDocument;
+    _fileName = widget.initialFileName;
     _documentBytes = widget.initialDocumentBytes;
-    _isUploaded = widget.initialIsUploaded || _document != null || _documentBytes != null;
+    _isUploaded = _fileName != null;
   }
 
   Future<void> _pickDocument() async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'png', 'pdf'],
+      withData: true,
+    );
+
+    if (result != null && result.files.single.bytes != null) {
+      final bytes = result.files.single.bytes!;
+      if (bytes.length > 5 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('File must be less than 5 MB'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+      
       setState(() {
-        _document = pickedFile;
+        _fileName = result.files.single.name;
         _documentBytes = bytes;
         _isUploaded = true;
       });
-      widget.onChanged(_document, _documentBytes);
+      widget.onChanged(_fileName, _documentBytes);
     }
   }
 
   void _removeDocument() {
     setState(() {
-      _document = null;
+      _fileName = null;
       _documentBytes = null;
       _isUploaded = false;
     });
@@ -62,26 +73,36 @@ class _KycUploadFieldState extends State<KycUploadField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'KYC Verification',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+        const Row(
+          children: [
+            Text(
+              'KYC Verification *',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(width: 8),
+            Text(
+              'Required',
+              style: TextStyle(
+                color: Colors.red,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 4),
         Text(
-          'Upload any one government ID for verification',
+          'Upload any one government ID for verification (JPG/PNG/PDF, max 5MB)',
           style: TextStyle(
             color: Colors.grey.shade600,
             fontSize: 13,
           ),
         ),
         const SizedBox(height: 12),
-        // TODO: TEMPORARY — KYC document image is currently held only in local memory (XFile) for this session.
-        // Once backend is connected, this image should be uploaded via a real API call (e.g., POST /api/user/kyc-upload)
-        // and the response reference stored, rather than relying on local state alone.
         GestureDetector(
           onTap: _isUploaded ? null : _pickDocument,
           child: Container(
@@ -93,37 +114,48 @@ class _KycUploadFieldState extends State<KycUploadField> {
               border: Border.all(
                 color: Colors.grey.shade300,
                 width: 1,
-                style: BorderStyle.solid, // solid or dashed
               ),
             ),
             child: _isUploaded
                 ? Stack(
                     children: [
                       Positioned.fill(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: _documentBytes != null
-                              ? Image.memory(
-                                  _documentBytes!,
-                                  fit: BoxFit.cover,
-                                )
-                              : Container(
-                                  color: Colors.grey.shade200,
-                                  child: const Center(
-                                    child: Text(
-                                      'Document already uploaded',
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                _fileName?.toLowerCase().endsWith('.pdf') == true
+                                    ? Icons.picture_as_pdf
+                                    : Icons.image,
+                                color: AppColors.primary,
+                                size: 40,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _fileName ?? 'Document uploaded',
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (_documentBytes != null)
+                                Text(
+                                  '${(_documentBytes!.length / 1024 / 1024).toStringAsFixed(2)} MB',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
                                   ),
                                 ),
+                            ],
+                          ),
                         ),
                       ),
                       Positioned(
                         top: 8,
                         left: 8,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.green,
                             borderRadius: BorderRadius.circular(12),
@@ -164,13 +196,34 @@ class _KycUploadFieldState extends State<KycUploadField> {
                           ),
                         ),
                       ),
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: GestureDetector(
+                          onTap: _pickDocument,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Text(
+                              'Replace',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   )
                 : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.upload_file,
-                          color: Colors.grey.shade500, size: 32),
+                      Icon(Icons.upload_file, color: Colors.grey.shade500, size: 32),
                       const SizedBox(height: 8),
                       const Text(
                         'Tap to Upload ID',

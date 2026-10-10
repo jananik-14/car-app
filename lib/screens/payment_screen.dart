@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/payment_service.dart';
 import '../services/admin_notification_store.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
 import '../widgets/upi_payment_section.dart';
 import '../config/payment_config.dart';
+import '../config/app_config.dart';
 import '../utils/local_listings_store.dart';
 import '../services/payment_records_store.dart';
 import '../services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/profile_storage_helper.dart';
+import '../widgets/listing_image.dart';
+import 'dart:math' as math;
 
 // TODO: Payment status is NOT confirmed by the app. Real confirmation must come from backend (gateway webhook / bank reconciliation).
 // Replace manual UTR verification with a payment gateway and backend-driven status once connected.
@@ -80,9 +82,37 @@ class _PaymentScreenState extends State<PaymentScreen>
         .format(amount);
   }
 
+  int get _finalTotal {
+    final store = LocalListingsStore();
+    final listing = store.acceptedListings.firstWhere(
+      (l) => l['id'] == widget.id,
+      orElse: () => <String, dynamic>{},
+    );
+    final currentBid = listing['currentBid'] ?? listing['price'] ?? widget.amount;
+    int total = widget.amount;
+    if (currentBid is int) {
+      total = currentBid;
+    } else if (currentBid != null) {
+      String str = currentBid.toString().trim();
+      if (str.toUpperCase().contains('L')) {
+        String numStr = str.replaceAll(RegExp(r'[^0-9.]'), '');
+        double val = double.tryParse(numStr) ?? 0;
+        total = (val * 100000).toInt();
+      } else {
+        String priceStr = str.replaceAll(RegExp(r'[^0-9]'), '');
+        total = int.tryParse(priceStr) ?? widget.amount;
+      }
+    }
+    return total;
+  }
+
+  int get _tokenAmt {
+    return math.min(kTokenAmount, _finalTotal);
+  }
+
   Future<void> _openCheckout() async {
     final order = await PaymentService().createOrder(
-      amountInRupees: PaymentConfig.tokenAmount,
+      amountInRupees: _tokenAmt,
       purpose: 'Token for ${widget.title}',
       referenceId: 'tok_${widget.id}_${DateTime.now().millisecondsSinceEpoch}',
     );
@@ -257,8 +287,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     await Future.delayed(const Duration(seconds: 1));
 
     final amt = type == 'token'
-        ? PaymentConfig.tokenAmount
-        : (widget.amount - PaymentConfig.tokenAmount);
+        ? _tokenAmt
+        : (_finalTotal - _tokenAmt);
 
     // TODO: Frontend can only check UTR format and duplicates, and require a screenshot —
     // it CANNOT cryptographically verify a real bank/UPI transaction occurred.
@@ -335,6 +365,33 @@ class _PaymentScreenState extends State<PaymentScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (kDevMode)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Demo payment: do not send real money',
+                          style: TextStyle(
+                            color: Colors.orange.shade900,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               _buildInfoBanner(),
               const SizedBox(height: 16),
               _buildSummaryCard(),
@@ -376,7 +433,13 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   Widget _buildSummaryCard() {
-    final balanceAmt = widget.amount - PaymentConfig.tokenAmount;
+    final balanceAmt = _finalTotal - _tokenAmt;
+    final store = LocalListingsStore();
+    final listing = store.acceptedListings.firstWhere(
+      (l) => l['id'] == widget.id,
+      orElse: () => <String, dynamic>{},
+    );
+    
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -384,7 +447,7 @@ class _PaymentScreenState extends State<PaymentScreen>
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],
@@ -395,21 +458,26 @@ class _PaymentScreenState extends State<PaymentScreen>
         children: [
           Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: widget.image.startsWith('http')
-                    ? Image.network(widget.image,
-                        width: 60, height: 60, fit: BoxFit.cover)
-                    : Image.asset(widget.image,
+              listing.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: ListingImage(
+                        listing: listing,
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                            width: 60,
-                            height: 60,
-                            color: Colors.grey.shade300,
-                            child: const Icon(Icons.directions_car))),
-              ),
+                      ),
+                    )
+                  : Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.directions_car,
+                          color: Colors.grey.shade400, size: 30),
+                    ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -421,7 +489,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                             fontSize: 16,
                             fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text('Total: ${_formatAmount(widget.amount)}',
+                    Text('Total: ${_formatAmount(_finalTotal)}',
                         style: TextStyle(
                             color: navyBlue,
                             fontSize: 14,
@@ -441,7 +509,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                           ? orange
                           : Colors.grey.shade600,
                       fontWeight: FontWeight.bold)),
-              Text(_formatAmount(PaymentConfig.tokenAmount),
+              Text(_formatAmount(_tokenAmt),
                   style: TextStyle(
                       color: _currentStep == 'token'
                           ? orange
@@ -481,6 +549,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   Widget _buildTokenStep() {
+    final refundableStr = kTokenRefundable ? 'refundable ' : '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -499,7 +568,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                       fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               UpiPaymentSection(
-                amount: PaymentConfig.tokenAmount,
+                amount: _tokenAmt,
                 transactionNote: 'Token for ${widget.title}',
                 onVerificationRequested: () => _showVerificationForm('token'),
                 onAwaitingUpiReturnChanged: (val) => _awaitingUpiReturn = val,
@@ -520,7 +589,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                 Icon(Icons.security, size: 48, color: orange),
                 const SizedBox(height: 16),
                 Text(
-                  'Pay the refundable token of ${_formatAmount(PaymentConfig.tokenAmount)} securely to participate in the auction.',
+                  'Pay the ${refundableStr}token of ${_formatAmount(_tokenAmt)} securely to confirm your purchase.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
                 ),

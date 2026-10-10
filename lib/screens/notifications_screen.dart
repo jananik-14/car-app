@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/responsive_nav_scaffold.dart';
-import '../utils/global_store.dart';
 import '../services/client_notification_store.dart';
 import '../services/auth_service.dart';
+import '../router/app_router.dart';
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -12,7 +13,6 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  bool _isCleared = false;
 
   @override
   Widget build(BuildContext context) {
@@ -57,9 +57,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Column(
+          const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text(
                 'Wheels2Drive',
                 style: TextStyle(
@@ -94,7 +94,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           Expanded(
             child: Row(
               children: [
-                Expanded(
+                const Expanded(
                   child: Text(
                     'Notifications',
                     style: TextStyle(
@@ -106,7 +106,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (!_isCleared && ClientNotificationStore().unreadCountFor(AuthService().currentPhone ?? '') > 0) ...[
+                if (ClientNotificationStore().unreadCountFor(AuthService().currentPhone ?? '') > 0) ...[
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.all(6),
@@ -128,34 +128,62 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ],
             ),
           ),
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _isCleared = true;
-                ClientNotificationStore().markAllAsReadFor(AuthService().currentPhone ?? '');
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: lightBlueGrey,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: const [
-                  Icon(Icons.clear_all, size: 16, color: AppColors.primary),
-                  SizedBox(width: 4),
-                  Text(
-                    'Clear all',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  ClientNotificationStore().markAllAsReadFor(AuthService().currentPhone ?? '');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: lightBlueGrey,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                ],
+                  child: const Row(
+                    children: [
+                      Icon(Icons.done_all, size: 16, color: AppColors.primary),
+                      SizedBox(width: 4),
+                      Text(
+                        'Mark all read',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () {
+                  ClientNotificationStore().clearAllFor(AuthService().currentPhone ?? '');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: lightBlueGrey,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.clear_all, size: 16, color: AppColors.primary),
+                      SizedBox(width: 4),
+                      Text(
+                        'Clear all',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -165,11 +193,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget _buildNotificationList() {
     final phone = AuthService().currentPhone ?? '';
     final notifs = ClientNotificationStore().forCurrentUser(phone);
-    if (_isCleared || notifs.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(48.0),
+    if (notifs.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(48.0),
         child: Column(
-          children: const [
+          children: [
             Icon(Icons.notifications_off_outlined, size: 64, color: AppColors.outline),
             SizedBox(height: 16),
             Text(
@@ -207,22 +235,39 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
             return Column(
               children: [
-                _buildNotificationCard(
-                  iconData: iconData,
-                  iconColor: Colors.white,
-                  iconBgColor: iconBgColor,
-                  title: notif.title,
-                  boldHighlight: '',
-                  highlightColor: iconBgColor,
-                  content: '', // content was absorbed into title
-                  time: _formatTimeAgo(notif.timestamp),
-                  showDot: !notif.isRead,
-                  dotColor: AppColors.secondaryContainer,
+                InkWell(
+                  onTap: () {
+                    ClientNotificationStore().markAsRead(notif);
+                    if (notif.type == 'listing_live' || notif.type == 'listing_approved' || notif.type == 'listing_rejected' || notif.type == 'sold') {
+                      if (notif.refId != null) openVehicleDetail(context, notif.refId!); else context.push('/my_activity');
+                    } else if (notif.type == 'bid_won' || notif.type == 'bid_lost' || notif.type == 'outbid') {
+                      if (notif.refId != null) openVehicleDetail(context, notif.refId!); else context.push('/my_activity');
+                    } else if (notif.type == 'subscription_active') {
+                      context.push('/subscription');
+                    } else if (notif.type == 'payment' && notif.refId != null) {
+                      context.push('/payment/${notif.refId}');
+                    } else if (notif.type == 'payment') {
+                      context.push('/payment');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: _buildNotificationCard(
+                    iconData: iconData,
+                    iconColor: Colors.white,
+                    iconBgColor: iconBgColor,
+                    title: notif.title,
+                    boldHighlight: '',
+                    highlightColor: iconBgColor,
+                    content: '', // content was absorbed into title
+                    time: _formatTimeAgo(notif.timestamp),
+                    showDot: !notif.isRead,
+                    dotColor: const Color(0xFFFF9800), // Orange dot
+                  ),
                 ),
                 const SizedBox(height: 16),
               ],
             );
-          }).toList(),
+          }),
           const SizedBox(height: 32),
         ],
       ),
@@ -285,10 +330,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               children: [
                 RichText(
                   text: TextSpan(
-                    style: const TextStyle(
-                      color: AppColors.onSurface,
+                    style: TextStyle(
+                      color: showDot ? AppColors.primary : AppColors.onSurface,
                       fontSize: 14,
                       height: 1.4,
+                      fontWeight: showDot ? FontWeight.bold : FontWeight.normal,
                     ),
                     children: [
                       TextSpan(text: title),

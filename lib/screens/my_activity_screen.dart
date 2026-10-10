@@ -3,6 +3,7 @@ import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
 import '../utils/local_listings_store.dart';
+import '../router/app_router.dart';
 
 class MyActivityScreen extends StatefulWidget {
   const MyActivityScreen({super.key});
@@ -264,7 +265,9 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
         statusColor = Colors.grey;
     }
 
-    return Container(
+    return GestureDetector(
+      onTap: () => openVehicleDetail(context, bid['vehicleId']?.toString() ?? ''),
+      child: Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -414,6 +417,7 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -436,7 +440,9 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
         statusColor = Colors.grey;
     }
 
-    return Container(
+    return GestureDetector(
+      onTap: () => openVehicleDetail(context, listing['id']?.toString() ?? ''),
+      child: Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -520,24 +526,7 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () {
-                          context.push('/vehicle_detail/${listing['id']}', extra: {
-                            'vehicleData': {
-                              'id': listing['id'],
-                              'title': listing['title'],
-                              'image': listing['image'],
-                              'year': listing['title'].split(' ')[0],
-                              'name': listing['title'].substring(listing['title'].indexOf(' ') + 1),
-                              'currentBid': listing['highest_bid'] == '-' ? '0' : listing['highest_bid'],
-                              'location': 'Local',
-                              'bidsPlaced': listing['highest_bid'] == '-' ? '0' : '1',
-                              'specs': '${listing['title'].split(' ')[0]} • Petrol',
-                              'bid': listing['highest_bid'],
-                              'bids_placed': listing['highest_bid'] == '-' ? '0' : '1',
-                              'time_left': 'N/A'
-                            },
-                            'isOwner': true,
-                            'isPending': listing['status'] == 'Pending Approval',
-                          });
+                          openVehicleDetail(context, listing['id']?.toString() ?? '');
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: navyBlue,
@@ -579,6 +568,7 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

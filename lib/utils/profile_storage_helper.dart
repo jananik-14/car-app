@@ -21,13 +21,17 @@ class ProfileStorageHelper {
   }
 
   static Future<bool> isProfileComplete(String phone) async {
+    final name = await getProfileField(phone, 'user_name');
+    final email = await getProfileField(phone, 'user_email');
+    final city = await getProfileField(phone, 'user_city');
+    
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('isProfileComplete_${normalizePhone(phone)}') ?? false;
-  }
-
-  static Future<void> setProfileComplete(String phone) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isProfileComplete_${normalizePhone(phone)}', true);
+    final hasKyc = prefs.getBool('kyc_uploaded_$phone') ?? prefs.getBool('kyc_uploaded_${normalizePhone(phone)}') ?? false;
+    
+    return name != null && name.trim().isNotEmpty &&
+           email != null && email.trim().isNotEmpty &&
+           city != null && city.trim().isNotEmpty &&
+           hasKyc;
   }
 
   static Future<void> saveProfileField(String phone, String fieldKey, String value) async {

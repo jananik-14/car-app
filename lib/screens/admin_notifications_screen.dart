@@ -4,7 +4,7 @@ import '../widgets/admin_navigation_drawer.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../widgets/admin_app_bar.dart';
 import '../services/admin_notification_store.dart';
-import 'package:intl/intl.dart'; // Add this for time formatting if needed
+// Add this for time formatting if needed
 
 class AdminNotificationsScreen extends StatefulWidget {
   const AdminNotificationsScreen({super.key});
@@ -208,12 +208,12 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   }
 
   Widget _buildListContent(List<AdminNotificationItem> notifications) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      decoration: BoxDecoration(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-      ),
+        clipBehavior: Clip.antiAlias,
       child: ListView.separated(
         itemCount: notifications.length,
         separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEEEEEE)),
@@ -224,7 +224,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             leading: CircleAvatar(
-              backgroundColor: color.withOpacity(0.1),
+              backgroundColor: color.withValues(alpha: 0.1),
               child: Icon(_iconForType(notification.type), color: color),
             ),
             title: Text(
@@ -261,6 +261,6 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           );
         },
       ),
-    );
+    ));
   }
 }

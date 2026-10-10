@@ -29,16 +29,39 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   final Color orange = const Color(0xFFFB7800);
 
   // Step 1 State
-  String _selectedVehicleType = 'Car / SUV';
-  String _selectedFuelType = 'Petrol';
-  String _selectedTransmission = 'Manual';
+  String? _selectedVehicleType;
+  String? _selectedFuelType;
+  String? _selectedTransmission;
+
+  final TextEditingController _brandController = TextEditingController();
+  final TextEditingController _modelController = TextEditingController();
+  final TextEditingController _variantController = TextEditingController();
+  String? _selectedYear;
+
+  bool _step1Submitted = false;
+
+  // Step 2 State
+  final TextEditingController _registrationController = TextEditingController();
+  final TextEditingController _cityController = TextEditingController();
+  String? _selectedState;
+  final TextEditingController _pincodeController = TextEditingController();
+  bool _step2Submitted = false;
+
+  final Map<String, String> _stateCodes = {
+    'Andaman and Nicobar Islands': 'AN', 'Andhra Pradesh': 'AP', 'Arunachal Pradesh': 'AR', 'Assam': 'AS', 'Bihar': 'BR', 'Chandigarh': 'CH', 'Chhattisgarh': 'CG', 'Dadra and Nagar Haveli': 'DN', 'Daman and Diu': 'DD', 'Delhi': 'DL', 'Goa': 'GA', 'Gujarat': 'GJ', 'Haryana': 'HR', 'Himachal Pradesh': 'HP', 'Jammu and Kashmir': 'JK', 'Jharkhand': 'JH', 'Karnataka': 'KA', 'Kerala': 'KL', 'Lakshadweep': 'LD', 'Madhya Pradesh': 'MP', 'Maharashtra': 'MH', 'Manipur': 'MN', 'Meghalaya': 'ML', 'Mizoram': 'MZ', 'Nagaland': 'NL', 'Odisha': 'OR', 'Puducherry': 'PY', 'Punjab': 'PB', 'Rajasthan': 'RJ', 'Sikkim': 'SK', 'Tamil Nadu': 'TN', 'Telangana': 'TG', 'Tripura': 'TR', 'Uttar Pradesh': 'UP', 'Uttarakhand': 'UK', 'West Bengal': 'WB'
+  };
+
+  String get locationDisplay {
+    if (_cityController.text.trim().isEmpty || _selectedState == null) return '';
+    return '${_cityController.text.trim()}, ${_stateCodes[_selectedState] ?? ''}';
+  }
 
   // Step 3 State
-  final TextEditingController _kmController =
-      TextEditingController(text: '42,500');
-  String _selectedOwner = '1st Owner';
-  String _selectedInsuranceType = 'Comprehensive (Zero Dep)';
-  DateTime _insuranceExpiryDate = DateTime(2025, 11, 24);
+  final TextEditingController _kmController = TextEditingController();
+  String? _selectedOwner;
+  String? _selectedInsuranceType;
+  DateTime? _insuranceExpiryDate;
+  bool _step3Submitted = false;
 
   String _formatDate(DateTime date) {
     const months = [
@@ -59,10 +82,25 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   }
 
   // Step 5 State
-  final TextEditingController _priceController =
-      TextEditingController(text: '5,80,000');
-  bool _enableReservePrice = true;
-  String _selectedDuration = '48 Hours';
+  final TextEditingController _priceController = TextEditingController();
+  String? _selectedDuration;
+  bool _step5Submitted = false;
+
+  String _formatIndianNumber(String s) {
+    if (s.isEmpty) return s;
+    int len = s.length;
+    if (len <= 3) return s;
+    String res = s.substring(len - 3);
+    s = s.substring(0, len - 3);
+    while (s.length > 2) {
+      res = '${s.substring(s.length - 2)},$res';
+      s = s.substring(0, s.length - 2);
+    }
+    if (s.isNotEmpty) {
+      res = '$s,$res';
+    }
+    return res;
+  }
 
   // Step 4 State (Uploads)
   final ImagePicker _picker = ImagePicker();
@@ -73,6 +111,258 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   List<XFile> engineTyresImages = [];
   List<XFile> rcInsuranceImages = [];
   PlatformFile? inspectionReportFile;
+
+  @override
+  void dispose() {
+    _brandController.dispose();
+    _modelController.dispose();
+    _variantController.dispose();
+    _registrationController.dispose();
+    _cityController.dispose();
+    _pincodeController.dispose();
+    super.dispose();
+  }
+
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialData != null) {
+      final d = widget.initialData!;
+      _selectedVehicleType = d['vehicleType'];
+      _selectedFuelType = d['fuelType'];
+      _selectedTransmission = d['transmission'];
+      _brandController.text = d['brand'] ?? '';
+      _modelController.text = d['model'] ?? '';
+      _variantController.text = d['variant'] ?? '';
+      _selectedYear = d['year']?.toString();
+      _cityController.text = d['city'] ?? '';
+      _selectedState = d['state'];
+      _pincodeController.text = d['pincode'] ?? '';
+      _registrationController.text = d['registrationNumber'] ?? '';
+      _kmController.text = d['kilometersDriven'] ?? '';
+      _selectedOwner = d['owner'];
+      _selectedInsuranceType = d['insuranceType'];
+      if (d['insuranceExpiryDate'] != null) {
+        _insuranceExpiryDate = DateTime.tryParse(d['insuranceExpiryDate']);
+      }
+      _priceController.text = d['price']?.toString() ?? '';
+      if (d['durationHours'] != null) {
+        _selectedDuration = '${d['durationHours']} Hours';
+      }
+    }
+  }
+
+  Future<void> _handleFinalSubmit() async {
+    int? problematicStep;
+    List<String> errors = [];
+
+    if (_selectedVehicleType == null || _selectedFuelType == null || _selectedTransmission == null || _brandController.text.trim().isEmpty || _modelController.text.trim().isEmpty || _selectedYear == null) {
+      if (problematicStep == null) problematicStep = 1;
+      List<String> s1 = [];
+      if (_selectedVehicleType == null) s1.add("Vehicle type");
+      if (_selectedFuelType == null) s1.add("Fuel");
+      if (_selectedTransmission == null) s1.add("Transmission");
+      if (_brandController.text.trim().isEmpty) s1.add("Brand");
+      if (_modelController.text.trim().isEmpty) s1.add("Model");
+      if (_selectedYear == null) s1.add("Year");
+      errors.add("Step 1: Missing ${s1.join(', ')}");
+    }
+
+    if (_registrationController.text.trim().isEmpty || _cityController.text.trim().isEmpty || _selectedState == null || (_pincodeController.text.trim().isNotEmpty && _pincodeController.text.trim().length != 6)) {
+      if (problematicStep == null) problematicStep = 2;
+      List<String> s2 = [];
+      if (_registrationController.text.trim().isEmpty) s2.add("Registration number");
+      if (_cityController.text.trim().isEmpty) s2.add("City");
+      if (_selectedState == null) s2.add("State");
+      if (_pincodeController.text.trim().isNotEmpty && _pincodeController.text.trim().length != 6) s2.add("Pincode must be 6 digits");
+      errors.add("Step 2: Missing or invalid ${s2.join(', ')}");
+    }
+
+    final km = int.tryParse(_kmController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    if (km <= 0 || _selectedOwner == null || _selectedInsuranceType == null || _insuranceExpiryDate == null) {
+      if (problematicStep == null) problematicStep = 3;
+      List<String> s3 = [];
+      if (km <= 0) s3.add("KM > 0");
+      if (_selectedOwner == null) s3.add("Previous owners");
+      if (_selectedInsuranceType == null) s3.add("Insurance type");
+      if (_insuranceExpiryDate == null) s3.add("Insurance expiry");
+      errors.add("Step 3: Missing or invalid ${s3.join(', ')}");
+    }
+
+    if (!widget.isEditMode && (frontViewImages.isEmpty || inspectionReportFile == null)) {
+      if (problematicStep == null) problematicStep = 4;
+      List<String> s4 = [];
+      if (frontViewImages.isEmpty) s4.add("Front View photo");
+      if (inspectionReportFile == null) s4.add("Inspection Report PDF");
+      errors.add("Step 4: Missing ${s4.join(', ')}");
+    }
+
+    final priceInt = int.tryParse(_priceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    if (priceInt <= 0 || _selectedDuration == null) {
+      if (problematicStep == null) problematicStep = 5;
+      List<String> s5 = [];
+      if (priceInt <= 0) s5.add("Price > 0");
+      if (_selectedDuration == null) s5.add("Auction duration");
+      errors.add("Step 5: Missing or invalid ${s5.join(', ')}");
+    }
+
+    if (problematicStep != null) {
+      setState(() {
+        _currentStep = problematicStep!;
+        if (problematicStep == 1) _step1Submitted = true;
+        if (problematicStep == 2) _step2Submitted = true;
+        if (problematicStep == 3) _step3Submitted = true;
+        if (problematicStep == 5) _step5Submitted = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Please fix errors:\n${errors.join('\n')}', style: const TextStyle(height: 1.4)),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ));
+      return;
+    }
+
+    setState(() { _isSubmitting = true; });
+    try {
+      final phone = AuthService().currentPhone;
+      final normalizedPhone = phone != null ? ProfileStorageHelper.normalizePhone(phone) : '';
+      final prefs = await SharedPreferences.getInstance();
+      final realName = prefs.getString('user_name_$normalizedPhone') ?? (phone != null && phone.isNotEmpty ? phone : 'Unknown Seller');
+      final sellerType = prefs.getString('user_type_$normalizedPhone') ?? '';
+      final durationHrs = int.tryParse(_selectedDuration!.split(' ')[0]) ?? 48;
+
+      List<XFile> allImages = [
+        ...frontViewImages,
+        ...rearViewImages,
+        ...leftRightImages,
+        ...interiorDashImages,
+        ...engineTyresImages,
+        ...rcInsuranceImages
+      ];
+      List<Uint8List> photosBytes = [];
+      for (var file in allImages.take(6)) {
+        photosBytes.add(await file.readAsBytes());
+      }
+
+      String finalTitle = '${_selectedYear ?? ''} ${_brandController.text.trim()} ${_modelController.text.trim()} ${_variantController.text.trim()}'.replaceAll(RegExp(r'\s+'), ' ').trim();
+      String regNo = _registrationController.text.trim().toUpperCase();
+      String stateCodeStr = regNo.length >= 5 ? regNo.substring(0, 5) : regNo;
+      String locDisplay = locationDisplay;
+      int priceInt = int.tryParse(_priceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+
+      final listingData = {
+        'id': widget.isEditMode ? widget.initialData!['id'] : DateTime.now().millisecondsSinceEpoch.toString(),
+        'title': finalTitle,
+        'brand': _brandController.text.trim(),
+        'model': _modelController.text.trim(),
+        'variant': _variantController.text.trim(),
+        'year': int.tryParse(_selectedYear ?? ''),
+        'city': _cityController.text.trim(),
+        'state': _selectedState,
+        'stateCode': stateCodeStr,
+        'pincode': _pincodeController.text.trim(),
+        'locationDisplay': locDisplay,
+        'price': priceInt,
+        'sellerName': realName,
+        'sellerPhone': phone,
+        'durationHours': durationHrs,
+        'status': widget.isEditMode ? widget.initialData!['status'] : 'pending',
+        'endProcessed': widget.isEditMode ? widget.initialData!['endProcessed'] : false,
+        'location': locDisplay,
+        'timeAgo': 'Just now',
+        'type': sellerType,
+        'rcStatus': 'Clear',
+        'inspection': '4.5 / 5.0',
+        'tag': 'New',
+        'inspectionReportBytes': inspectionReportFile?.bytes ?? (widget.isEditMode ? widget.initialData!['inspectionReportBytes'] : null),
+        'inspectionReportName': inspectionReportFile?.name ?? (widget.isEditMode ? widget.initialData!['inspectionReportName'] : null),
+        'vehicleType': _selectedVehicleType,
+        'fuelType': _selectedFuelType,
+        'transmission': _selectedTransmission,
+        'registrationNumber': regNo,
+        'kilometersDriven': _kmController.text,
+        'owner': _selectedOwner,
+        'insuranceType': _selectedInsuranceType,
+        'insuranceExpiryDate': _insuranceExpiryDate?.toIso8601String(),
+        'photos': photosBytes.isNotEmpty ? photosBytes : (widget.isEditMode ? widget.initialData!['photos'] : []),
+      };
+
+      if (widget.isEditMode) {
+        LocalListingsStore().updateListing(listingData);
+      } else {
+        await LocalListingsStore().addListing(listingData);
+      }
+
+      if (!widget.isEditMode) {
+        AdminNotificationStore().addNotification('New listing submitted: $finalTitle by $realName — awaiting approval', 'listing');
+      }
+      
+      if (mounted) {
+        if (widget.isEditMode) {
+           context.pop(true);
+        } else {
+           context.push('/confirmation/listing');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Could not save listing: $e. Try smaller photos.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) {
+        setState(() { _isSubmitting = false; });
+      }
+    }
+  }
+
+  Widget _buildTextField(String label, TextEditingController controller, String hint, {bool required = false, String? errorText}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
+            if (required) const Text(' *', style: TextStyle(color: Colors.red)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: errorText != null ? Colors.red : Colors.grey[300]!),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  onChanged: (val) => setState(() {}),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    hintText: hint,
+                    hintStyle: const TextStyle(color: Colors.black26),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 8),
+            child: Text(errorText, style: const TextStyle(color: Colors.red, fontSize: 12)),
+          ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -171,6 +461,15 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   }
 
   Widget _buildProgressIndicator() {
+    String stepTitle = '';
+    switch (_currentStep) {
+      case 1: stepTitle = 'Vehicle Category'; break;
+      case 2: stepTitle = 'Vehicle Identity'; break;
+      case 3: stepTitle = 'Vehicle Health & Records'; break;
+      case 4: stepTitle = 'Upload Photos'; break;
+      case 5: stepTitle = 'Pricing & Auction'; break;
+      default: stepTitle = 'Step $_currentStep'; break;
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       color: Colors.white,
@@ -191,17 +490,9 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                 ],
               ),
               Text(
-                _currentStep == 1
-                    ? 'Vehicle Category'
-                    : _currentStep == 2
-                        ? 'Vehicle Identity'
-                        : _currentStep == 3
-                            ? 'Vehicle Health & Records'
-                            : _currentStep == 4
-                                ? 'Upload Photos'
-                                : 'Pricing & Auction',
-                style: TextStyle(
-                  color: _currentStep == 5 ? orange : Colors.grey,
+                stepTitle,
+                style: const TextStyle(
+                  color: Colors.grey,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -241,6 +532,11 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 32),
 
+        if (_step1Submitted && _selectedVehicleType == null)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('Select vehicle type', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
         // Vehicle Type Grid
         GridView.count(
           crossAxisCount: 2,
@@ -263,6 +559,86 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 32),
 
+        _buildTextField('Brand / Make', _brandController, 'e.g. Hyundai', required: true, errorText: _step1Submitted && _brandController.text.trim().isEmpty ? 'Enter brand' : null),
+        _buildTextField('Model', _modelController, 'e.g. Creta', required: true, errorText: _step1Submitted && _modelController.text.trim().isEmpty ? 'Enter model' : null),
+        _buildTextField('Variant', _variantController, 'e.g. SX'),
+        
+        Text('Manufacturing Year *', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _step1Submitted && _selectedYear == null ? Colors.red : Colors.grey[300]!),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    menuMaxHeight: 280,
+                    dropdownColor: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    itemHeight: 48,
+                    value: _selectedYear,
+                    hint: const Text('Select year'),
+                    icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        _selectedYear = newValue;
+                      });
+                    },
+                    items: List.generate(DateTime.now().year - 1989, (index) => (DateTime.now().year - index).toString())
+                        .map<DropdownMenuItem<String>>((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value, style: TextStyle(color: navyBlue, fontSize: 14)),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_step1Submitted && _selectedYear == null)
+          const Padding(
+            padding: EdgeInsets.only(top: 4, left: 8),
+            child: Text('Select year', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
+        const SizedBox(height: 16),
+        
+        if (_brandController.text.trim().isNotEmpty && _modelController.text.trim().isNotEmpty && _selectedYear != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 24),
+            decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+            child: Row(
+              children: [
+                const Icon(Icons.preview, color: Colors.grey, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${_selectedYear} ${_brandController.text.trim()} ${_modelController.text.trim()} ${_variantController.text.trim()}'.replaceAll(RegExp(r'\s+'), ' ').trim(),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: navyBlue),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(4)),
+                  child: const Text('Listing title', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+
+        if (_step1Submitted && _selectedFuelType == null)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('Select fuel type', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
         // Fuel Type Section
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -272,11 +648,11 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: navyBlue)),
-            Row(
+            const Row(
               children: [
-                const Text('Select one',
+                Text('Select one',
                     style: TextStyle(color: Colors.grey, fontSize: 12)),
-                const SizedBox(width: 4),
+                SizedBox(width: 4),
                 Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.grey),
               ],
             )
@@ -295,6 +671,11 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 32),
 
+        if (_step1Submitted && _selectedTransmission == null)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('Select transmission', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
         // Transmission Section
         Text('Transmission',
             style: TextStyle(
@@ -313,42 +694,6 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 32),
 
-        // Info Banner
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue[100]!),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Parivahan & Vahan Sync Enabled',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue[900],
-                            fontSize: 14)),
-                    const SizedBox(height: 4),
-                    Text(
-                        'We\'ll fetch exact RTO registration specifications automatically.',
-                        style:
-                            TextStyle(color: Colors.blue[800], fontSize: 12)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 48),
-
         // Next Step Button
         SizedBox(
           width: double.infinity,
@@ -356,11 +701,17 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           child: ElevatedButton(
             onPressed: () {
               setState(() {
-                _currentStep = 2; // Go to step 2
+                _step1Submitted = true;
               });
+              if (_selectedVehicleType != null && _selectedFuelType != null && _selectedTransmission != null && _brandController.text.trim().isNotEmpty && _modelController.text.trim().isNotEmpty && _selectedYear != null) {
+                setState(() {
+                  _currentStep = 2; // Go to step 2
+                });
+              }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: orange,
+              backgroundColor: (_selectedVehicleType != null && _selectedFuelType != null && _selectedTransmission != null && _brandController.text.trim().isNotEmpty && _modelController.text.trim().isNotEmpty && _selectedYear != null) ? orange : Colors.grey,
+              disabledBackgroundColor: Colors.grey[300],
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(28),
               ),
@@ -416,7 +767,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? orange.withOpacity(0.05) : Colors.white,
+          color: isSelected ? orange.withValues(alpha: 0.05) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected ? orange : Colors.grey[300]!,
@@ -645,6 +996,17 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                     width: 1, thickness: 1, color: Colors.grey[300]),
                 Expanded(
                   child: TextField(
+                    controller: _registrationController,
+                    onChanged: (val) {
+                      final upper = val.toUpperCase();
+                      if (val != upper) {
+                        _registrationController.value = _registrationController.value.copyWith(
+                          text: upper,
+                          selection: TextSelection.collapsed(offset: upper.length),
+                        );
+                      }
+                      setState(() {});
+                    },
                     style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -653,7 +1015,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                     decoration: const InputDecoration(
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                      hintText: 'DL 01 AB 1234',
+                      hintText: 'e.g. TN 38 AB 1234',
                       hintStyle: TextStyle(color: Colors.black26),
                     ),
                   ),
@@ -662,20 +1024,79 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        if (_step2Submitted && _registrationController.text.replaceAll(' ', '').trim().isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 4, left: 8),
+            child: Text('Enter registration number', style: TextStyle(color: Colors.red, fontSize: 12)),
+          )
+        else if (_step2Submitted && !RegExp(r'^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$').hasMatch(_registrationController.text.replaceAll(' ', '').trim()))
+          const Padding(
+            padding: EdgeInsets.only(top: 4, left: 8),
+            child: Text('Enter a valid registration number', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
+        const SizedBox(height: 24),
+        
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.shield_outlined, size: 16, color: Colors.green[700]),
-            const SizedBox(width: 6),
-            Text(
-              'Instant verified lookup via Vahan Registry',
-              style: TextStyle(
-                  color: Colors.green[700],
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500),
+            Expanded(
+              child: _buildTextField('City', _cityController, 'e.g. Chennai', required: true, errorText: _step2Submitted && _cityController.text.trim().isEmpty ? 'Enter city' : null),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('State', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
+                      const Text(' *', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _step2Submitted && _selectedState == null ? Colors.red : Colors.grey[300]!),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        menuMaxHeight: 280,
+                        dropdownColor: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        itemHeight: 48,
+                        value: _selectedState,
+                        hint: const Text('Select state'),
+                        icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                        onChanged: (String? newValue) {
+                          setState(() {
+                            _selectedState = newValue;
+                          });
+                        },
+                        items: _stateCodes.keys.map<DropdownMenuItem<String>>((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value, style: TextStyle(color: navyBlue, fontSize: 14)),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                  if (_step2Submitted && _selectedState == null)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4, left: 8),
+                      child: Text('Select state', style: TextStyle(color: Colors.red, fontSize: 12)),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
+        
+        _buildTextField('Pincode (Optional)', _pincodeController, '6 digit pincode', errorText: _step2Submitted && _pincodeController.text.trim().isNotEmpty && _pincodeController.text.trim().length != 6 ? 'Pincode must be 6 digits' : null),
 
         const SizedBox(height: 48),
 
@@ -686,11 +1107,19 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           child: ElevatedButton(
             onPressed: () {
               setState(() {
-                _currentStep = 3;
+                _step2Submitted = true;
               });
+              bool validReg = RegExp(r'^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$').hasMatch(_registrationController.text.replaceAll(' ', '').trim());
+              bool validPincode = _pincodeController.text.trim().isEmpty || _pincodeController.text.trim().length == 6;
+              if (validReg && _cityController.text.trim().isNotEmpty && _selectedState != null && validPincode) {
+                setState(() {
+                  _currentStep = 3;
+                });
+              }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: orange,
+              backgroundColor: (RegExp(r'^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$').hasMatch(_registrationController.text.replaceAll(' ', '').trim()) && _cityController.text.trim().isNotEmpty && _selectedState != null && (_pincodeController.text.trim().isEmpty || _pincodeController.text.trim().length == 6)) ? orange : Colors.grey,
+              disabledBackgroundColor: Colors.grey[300],
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(28),
               ),
@@ -792,17 +1221,22 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                                   fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(width: 8),
-                        Text('DL 01 AB 4092',
+                        Text(_registrationController.text.trim().isEmpty ? 'Not entered' : _registrationController.text.trim(),
                             style: TextStyle(
                                 fontWeight: FontWeight.bold, color: navyBlue)),
-                        const SizedBox(width: 8),
-                        Icon(Icons.check_circle,
-                            color: Colors.green[600], size: 16),
+                        if (_registrationController.text.trim().isNotEmpty) ...[
+                           const SizedBox(width: 8),
+                           Icon(Icons.check_circle,
+                               color: Colors.green[600], size: 16),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text('2021 Hyundai i20 Asta 1.2 Petrol',
-                        style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text(
+                        _selectedYear != null && _brandController.text.trim().isNotEmpty && _modelController.text.trim().isNotEmpty 
+                        ? '$_selectedYear ${_brandController.text.trim()} ${_modelController.text.trim()} ${_variantController.text.trim()}'.replaceAll(RegExp(r'\s+'), ' ').trim() 
+                        : 'Details not fully entered',
+                        style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
               ),
@@ -815,89 +1249,87 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Total Kilometers Driven',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: navyBlue)),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                  color: orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12)),
-              child: Text('Parivahan Verified',
-                  style: TextStyle(
-                      color: orange,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold)),
+            Row(
+               children: [
+                 Text('Total Kilometers Driven',
+                     style: TextStyle(
+                         fontSize: 16,
+                         fontWeight: FontWeight.bold,
+                         color: navyBlue)),
+                 const Text(' *', style: TextStyle(color: Colors.red)),
+               ],
             ),
           ],
         ),
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
-            color: Colors.blue[50],
+            color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue[100]!),
+            border: Border.all(color: _step3Submitted && _kmController.text.trim().isEmpty ? Colors.red : Colors.grey[300]!),
           ),
           child: Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _kmController,
+                  onChanged: (val) {
+                    String digitsOnly = val.replaceAll(RegExp(r'[^0-9]'), '');
+                    if (val != digitsOnly) {
+                       _kmController.value = _kmController.value.copyWith(
+                          text: digitsOnly,
+                          selection: TextSelection.collapsed(offset: digitsOnly.length),
+                       );
+                    }
+                    setState((){});
+                  },
                   style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: navyBlue),
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
+                    hintText: 'e.g. 42500',
+                    hintStyle: TextStyle(color: Colors.black26),
                     border: InputBorder.none,
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   ),
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Row(
                   children: [
-                    Text('KM',
+                    const Text('KM',
                         style: TextStyle(
                             fontWeight: FontWeight.bold, color: Colors.grey)),
-                    SizedBox(width: 8),
-                    Icon(Icons.check_circle, color: Colors.green),
+                    if (_kmController.text.trim().isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.check_circle, color: Colors.green),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Avg for 2021 models: ~35k-45k km',
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
-            Text('Standard Range',
-                style: TextStyle(
-                    color: Colors.green[700],
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold)),
-          ],
-        ),
+        if (_step3Submitted && _kmController.text.trim().isEmpty)
+          const Padding(
+             padding: EdgeInsets.only(top: 4, left: 8),
+             child: Text('Enter KM driven', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
         const SizedBox(height: 32),
 
         // Number of Owners
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text('Number of Previous Owners',
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: navyBlue)),
-            const Text('RC Record',
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const Text(' *', style: TextStyle(color: Colors.red)),
           ],
         ),
         const SizedBox(height: 16),
@@ -915,54 +1347,50 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             ],
           ),
         ),
+        if (_step3Submitted && _selectedOwner == null)
+          const Padding(
+             padding: EdgeInsets.only(top: 4, left: 8),
+             child: Text('Select number of owners', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
         const SizedBox(height: 32),
 
         // Insurance Details Section
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Insurance Details',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: navyBlue)),
-                const SizedBox(height: 4),
-                const Text('Protects transfer valuation',
-                    style: TextStyle(color: Colors.grey, fontSize: 12)),
-              ],
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(4)),
-              child: const Text('HSRP',
-                  style: TextStyle(
-                      color: Colors.black54,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold)),
-            ),
+            Text('Insurance Details',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: navyBlue)),
+            const SizedBox(height: 4),
+            const Text('Protects transfer valuation',
+                style: TextStyle(color: Colors.grey, fontSize: 12)),
           ],
         ),
         const SizedBox(height: 16),
-        Text('Insurance Coverage Type',
-            style: TextStyle(
-                fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
+        Row(
+          children: [
+             Text('Insurance Coverage Type',
+                 style: TextStyle(
+                     fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
+             const Text(' *', style: TextStyle(color: Colors.red)),
+          ],
+        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[300]!),
+            border: Border.all(color: _step3Submitted && _selectedInsuranceType == null ? Colors.red : Colors.grey[300]!),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               isExpanded: true,
+              menuMaxHeight: 280,
               value: _selectedInsuranceType,
+              hint: const Text('Select insurance type', style: TextStyle(color: Colors.black26)),
               icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
               style: TextStyle(fontSize: 14, color: navyBlue),
               onChanged: (String? newValue) {
@@ -986,19 +1414,29 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             ),
           ),
         ),
+        if (_step3Submitted && _selectedInsuranceType == null)
+          const Padding(
+             padding: EdgeInsets.only(top: 4, left: 8),
+             child: Text('Select insurance type', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
         const SizedBox(height: 16),
-        Text('Insurance Till (Expiry Date)',
-            style: TextStyle(
-                fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
+        Row(
+          children: [
+             Text('Insurance Till (Expiry Date)',
+                 style: TextStyle(
+                     fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
+             const Text(' *', style: TextStyle(color: Colors.red)),
+          ],
+        ),
         const SizedBox(height: 8),
         InkWell(
           onTap: () async {
-            print('Date field tapped');
+            FocusScope.of(context).unfocus();
             final DateTime? picked = await showDatePicker(
               context: context,
-              initialDate: _insuranceExpiryDate,
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2030),
+              initialDate: _insuranceExpiryDate ?? DateTime.now(),
+              firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
+              lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
               builder: (context, child) {
                 return Theme(
                   data: Theme.of(context).copyWith(
@@ -1023,50 +1461,86 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[300]!),
+              border: Border.all(color: _step3Submitted && _insuranceExpiryDate == null ? Colors.red : Colors.grey[300]!),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(_formatDate(_insuranceExpiryDate),
-                    style: TextStyle(fontSize: 14, color: navyBlue)),
+                Text(_insuranceExpiryDate != null ? _formatDate(_insuranceExpiryDate!) : 'Select date',
+                    style: TextStyle(fontSize: 14, color: _insuranceExpiryDate != null ? navyBlue : Colors.black26)),
                 const Icon(Icons.calendar_today_outlined,
                     color: Colors.grey, size: 20),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.green[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.green[200]!),
+        if (_step3Submitted && _insuranceExpiryDate == null)
+          const Padding(
+             padding: EdgeInsets.only(top: 4, left: 8),
+             child: Text('Select expiry date', style: TextStyle(color: Colors.red, fontSize: 12)),
           ),
-          child: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green[700], size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        const SizedBox(height: 12),
+        if (_insuranceExpiryDate != null)
+          Builder(
+            builder: (context) {
+              final now = DateTime.now();
+              final today = DateTime(now.year, now.month, now.day);
+              final expiry = DateTime(_insuranceExpiryDate!.year, _insuranceExpiryDate!.month, _insuranceExpiryDate!.day);
+              final diff = expiry.difference(today).inDays;
+              
+              Color bgColor;
+              Color borderColor;
+              Color iconColor;
+              Color textColor;
+              String text;
+              IconData icon;
+              
+              if (diff < 0) {
+                 bgColor = Colors.red[50]!;
+                 borderColor = Colors.red[200]!;
+                 iconColor = Colors.red[700]!;
+                 textColor = Colors.red[800]!;
+                 text = 'Insurance expired';
+                 icon = Icons.warning_amber_rounded;
+              } else if (diff <= 30) {
+                 bgColor = Colors.orange[50]!;
+                 borderColor = Colors.orange[200]!;
+                 iconColor = Colors.orange[700]!;
+                 textColor = Colors.orange[800]!;
+                 text = 'Expires in $diff days';
+                 icon = Icons.info_outline;
+              } else {
+                 bgColor = Colors.green[50]!;
+                 borderColor = Colors.green[200]!;
+                 iconColor = Colors.green[700]!;
+                 textColor = Colors.green[800]!;
+                 text = 'Valid for $diff more days';
+                 icon = Icons.check_circle;
+              }
+              
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
                   children: [
-                    Text('Validity: Active & Verified',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green[800],
-                            fontSize: 14)),
-                    const SizedBox(height: 2),
-                    Text('Synced with Vahan Government Database',
-                        style:
-                            TextStyle(color: Colors.green[700], fontSize: 12)),
+                    Icon(icon, color: iconColor, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(text,
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                              fontSize: 14)),
+                    ),
                   ],
                 ),
-              ),
-            ],
+              );
+            }
           ),
-        ),
         const SizedBox(height: 32),
 
         // Odometer Photo Tip
@@ -1117,11 +1591,17 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           child: ElevatedButton(
             onPressed: () {
               setState(() {
-                _currentStep = 4; // Go to step 4
+                _step3Submitted = true;
               });
+              if (_kmController.text.trim().isNotEmpty && int.tryParse(_kmController.text.replaceAll(RegExp(r'[^0-9]'), '')) != null && int.parse(_kmController.text.replaceAll(RegExp(r'[^0-9]'), '')) > 0 && _selectedOwner != null && _selectedInsuranceType != null && _insuranceExpiryDate != null) {
+                setState(() {
+                  _currentStep = 4; // Go to step 4
+                });
+              }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: orange,
+              backgroundColor: (_kmController.text.trim().isNotEmpty && int.tryParse(_kmController.text.replaceAll(RegExp(r'[^0-9]'), '')) != null && int.parse(_kmController.text.replaceAll(RegExp(r'[^0-9]'), '')) > 0 && _selectedOwner != null && _selectedInsuranceType != null && _insuranceExpiryDate != null) ? orange : Colors.grey,
+              disabledBackgroundColor: Colors.grey[300],
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(28),
               ),
@@ -1178,7 +1658,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           color: isSelected ? orange : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? orange : Colors.grey[300]!,
+            color: isSelected ? orange : (_step3Submitted && _selectedOwner == null ? Colors.red : Colors.grey[300]!),
           ),
         ),
         child: Text(
@@ -1194,7 +1674,11 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   }
 
   Future<void> _pickImages(List<XFile> currentList) async {
-    final List<XFile> pickedImages = await _picker.pickMultiImage();
+    final List<XFile> pickedImages = await _picker.pickMultiImage(
+      maxWidth: 1280,
+      maxHeight: 1280,
+      imageQuality: 80,
+    );
     if (pickedImages.isNotEmpty) {
       setState(() {
         currentList.addAll(pickedImages);
@@ -1202,16 +1686,23 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
     }
   }
 
+  BoxDecoration _getTileDecoration(bool isUploaded) {
+    return BoxDecoration(
+      color: const Color(0xFFFFFFFF),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: isUploaded ? const Color(0xFFFB7800) : const Color(0xFFE5E7EB),
+        width: isUploaded ? 1.5 : 1.0,
+      ),
+    );
+  }
+
   Widget _buildImageCategoryBox(
       String label, IconData icon, List<XFile> images) {
     if (images.isNotEmpty) {
       return Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[300]!),
-        ),
+        decoration: _getTileDecoration(true),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1221,31 +1712,27 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                 Expanded(
                   child: Row(
                     children: [
-                      Icon(icon, size: 16, color: navyBlue),
+                      Icon(icon, size: 16, color: orange),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           label,
                           style: TextStyle(
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w500,
                               color: navyBlue,
-                              fontSize: 12),
+                              fontSize: 13),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Text('${images.length} photos',
-                          style: const TextStyle(
-                              color: Colors.grey, fontSize: 10)),
                     ],
                   ),
                 ),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
+                    color: const Color(0xFFFFF1E6),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text('Uploaded',
                       style: TextStyle(
@@ -1269,28 +1756,27 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: FutureBuilder<Uint8List>(
-                              future: image.readAsBytes(),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                        ConnectionState.done &&
-                                    snapshot.hasData) {
-                                  return Image.memory(
-                                    snapshot.data!,
+                            child: Container(
+                              color: const Color(0xFFF3F4F6),
+                              child: FutureBuilder<Uint8List>(
+                                future: image.readAsBytes(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                          ConnectionState.done &&
+                                      snapshot.hasData) {
+                                    return Image.memory(
+                                      snapshot.data!,
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.cover,
+                                    );
+                                  }
+                                  return const SizedBox(
                                     width: 60,
                                     height: 60,
-                                    fit: BoxFit.cover,
                                   );
-                                }
-                                return const SizedBox(
-                                  width: 60,
-                                  height: 60,
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  ),
-                                );
-                              },
+                                },
+                              ),
                             ),
                           ),
                           Positioned(
@@ -1304,29 +1790,36 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                               },
                               child: Container(
                                 padding: const EdgeInsets.all(2),
-                                decoration: const BoxDecoration(
-                                  color: Colors.black54,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
                                   shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.1),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    )
+                                  ],
                                 ),
-                                child: const Icon(Icons.close,
-                                    color: Colors.white, size: 14),
+                                child: Icon(Icons.close,
+                                    color: navyBlue, size: 14),
                               ),
                             ),
                           ),
                         ],
                       ),
                     );
-                  }).toList(),
+                  }),
                   GestureDetector(
                     onTap: () => _pickImages(images),
                     child: Container(
                       width: 60,
                       height: 60,
                       decoration: BoxDecoration(
-                        color: Colors.grey[50],
+                        color: const Color(0xFFF3F4F6),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: navyBlue, style: BorderStyle.solid),
+                            color: const Color(0xFFE5E7EB), style: BorderStyle.solid),
                       ),
                       child: Center(
                         child: Icon(Icons.add, color: navyBlue),
@@ -1345,27 +1838,22 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
       onTap: () => _pickImages(images),
       child: Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-          border:
-              Border.all(color: Colors.grey[300]!, style: BorderStyle.solid),
-        ),
+        decoration: _getTileDecoration(false),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.grey, size: 28),
+            Icon(icon, color: navyBlue, size: 28),
             const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
-                  fontWeight: FontWeight.bold, color: navyBlue, fontSize: 12),
+                  fontWeight: FontWeight.w500, color: navyBlue, fontSize: 13),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
-            const Text('Tap to Upload',
-                style: TextStyle(color: Colors.grey, fontSize: 10)),
+            Text(label == 'Front View' ? 'Tap to Upload (Required)' : 'Tap to Upload',
+                style: TextStyle(color: label == 'Front View' ? orange : const Color(0xFF6B7280), fontSize: 11)),
           ],
         ),
       ),
@@ -1389,60 +1877,73 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   Widget _buildPdfCategoryBox() {
     if (inspectionReportFile != null) {
       return Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.green),
-        ),
-        child: Stack(
+        padding: const EdgeInsets.all(12),
+        decoration: _getTileDecoration(true),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Column(
+            Icon(Icons.picture_as_pdf, color: orange, size: 28),
+            const SizedBox(height: 4),
+            Text(
+              inspectionReportFile!.name,
+              style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: navyBlue,
+                  fontSize: 13),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text('${(inspectionReportFile!.size / 1024).toStringAsFixed(1)} KB',
+                style: const TextStyle(color: Color(0xFF6B7280), fontSize: 10)),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1E6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text('Uploaded',
+                  style: TextStyle(
+                      color: orange,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 8),
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.picture_as_pdf, color: Colors.green, size: 28),
-                const SizedBox(height: 4),
-                Text(
-                  inspectionReportFile!.name,
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: navyBlue,
-                      fontSize: 10),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                InkWell(
+                  onTap: _pickPdf,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.all(Radius.circular(4)),
+                    ),
+                    child: Text('Replace', style: TextStyle(color: navyBlue, fontSize: 10, fontWeight: FontWeight.w600)),
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                      color: Colors.green,
-                      borderRadius: BorderRadius.circular(4)),
-                  child: const Text('✓ Uploaded',
-                      style: TextStyle(color: Colors.white, fontSize: 8)),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      inspectionReportFile = null;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.all(Radius.circular(4)),
+                    ),
+                    child: const Text('Remove', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.w600)),
+                  ),
                 ),
               ],
-            ),
-            Positioned(
-              top: -4,
-              right: -4,
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    inspectionReportFile = null;
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.close, color: Colors.white, size: 14),
-                ),
-              ),
-            ),
+            )
           ],
         ),
       );
@@ -1452,27 +1953,22 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
       onTap: _pickPdf,
       child: Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-          border:
-              Border.all(color: Colors.grey[300]!, style: BorderStyle.solid),
-        ),
+        decoration: _getTileDecoration(false),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.picture_as_pdf, color: Colors.grey, size: 28),
+            Icon(Icons.picture_as_pdf, color: navyBlue, size: 28),
             const SizedBox(height: 4),
             Text(
               'Inspection Report',
               style: TextStyle(
-                  fontWeight: FontWeight.bold, color: navyBlue, fontSize: 12),
+                  fontWeight: FontWeight.w500, color: navyBlue, fontSize: 13),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
-            const Text('Upload PDF (Optional)',
-                style: TextStyle(color: Colors.grey, fontSize: 10)),
+            Text('Upload PDF',
+                style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
           ],
         ),
       ),
@@ -1665,7 +2161,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         const SizedBox(height: 12),
         const Text(
-          'Bidding will start from your reserve price. You can accept or decline final offers.',
+          'Buyers bid with confidence knowing they are verified profiles.',
           style: TextStyle(color: Colors.grey, fontSize: 16, height: 1.4),
         ),
         const SizedBox(height: 32),
@@ -1694,21 +2190,20 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text('2021 Hyundai Verna SX',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: navyBlue,
-                                fontSize: 14)),
-                        const SizedBox(width: 8),
-                        Icon(Icons.check_circle,
-                            color: Colors.green[600], size: 16),
-                      ],
-                    ),
+                    Text(
+                      '${_selectedYear ?? ''} ${_brandController.text.trim()} ${_modelController.text.trim()} ${_variantController.text.trim()}'.replaceAll(RegExp(r'\s+'), ' ').trim(),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: navyBlue,
+                          fontSize: 14)),
                     const SizedBox(height: 4),
-                    const Text('MH 02 FJ 9012 • 34,200 km • 1st Owner',
-                        style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text(
+                      [
+                        _registrationController.text.trim(),
+                        _kmController.text.trim().isNotEmpty ? '${_kmController.text.trim()} km' : null,
+                        _selectedOwner,
+                      ].where((e) => e != null && e.isNotEmpty).join(' • '),
+                      style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
               ),
@@ -1726,23 +2221,6 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: navyBlue)),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                  color: orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12)),
-              child: Row(
-                children: [
-                  Icon(Icons.local_fire_department, color: orange, size: 12),
-                  const SizedBox(width: 4),
-                  Text('Hot Demand',
-                      style: TextStyle(
-                          color: orange,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -1750,7 +2228,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[300]!),
+            border: Border.all(color: (_step5Submitted && _priceController.text.trim().isEmpty) ? Colors.red : Colors.grey[300]!),
           ),
           child: Row(
             children: [
@@ -1770,59 +2248,41 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                       fontWeight: FontWeight.bold,
                       color: navyBlue),
                   keyboardType: TextInputType.number,
+                  onChanged: (val) {
+                    setState(() {
+                      String numStr = val.replaceAll(RegExp(r'[^0-9]'), '');
+                      if (numStr.isNotEmpty) {
+                        String formatted = _formatIndianNumber(numStr);
+                        _priceController.value = TextEditingValue(
+                          text: formatted,
+                          selection: TextSelection.collapsed(offset: formatted.length),
+                        );
+                      } else {
+                        _priceController.text = '';
+                      }
+                    });
+                  },
                   decoration: const InputDecoration(
                     border: InputBorder.none,
+                    hintText: 'Enter expected price',
+                    hintStyle: TextStyle(fontSize: 20, color: Colors.black26),
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   ),
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Icon(Icons.check_circle, color: Colors.green),
-              ),
+              if (int.tryParse(_priceController.text.replaceAll(RegExp(r'[^0-9]'), '')) != null && int.tryParse(_priceController.text.replaceAll(RegExp(r'[^0-9]'), ''))! > 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Icon(Icons.check_circle, color: orange),
+                ),
             ],
           ),
         ),
         const SizedBox(height: 24),
 
-        // Reserve Price Toggle
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Switch(
-              value: _enableReservePrice,
-              onChanged: (val) {
-                setState(() {
-                  _enableReservePrice = val;
-                });
-              },
-              activeColor: Colors.white,
-              activeTrackColor: orange,
-              inactiveThumbColor: Colors.grey[400],
-              inactiveTrackColor: Colors.grey[200],
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Set Minimum Reserve Price',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: navyBlue,
-                          fontSize: 14)),
-                  const SizedBox(height: 4),
-                  const Text(
-                      'Auto-reject buyer bids below ₹5,20,000 to guarantee baseline sale security.',
-                      style: TextStyle(
-                          color: Colors.grey, fontSize: 12, height: 1.4)),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 32),
+        // Deleted reserve toggle section
+        const SizedBox(height: 12),
 
         // Auction Duration Section
         Row(
@@ -1847,112 +2307,75 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             const SizedBox(width: 8),
             Expanded(
                 child:
-                    _buildDurationCard('48 Hours', 'Recommended', 'BEST BIDS')),
+                    _buildDurationCard('48 Hours', 'Recommended', null)),
             const SizedBox(width: 8),
             Expanded(child: _buildDurationCard('72 Hours', 'Max Reach', null)),
           ],
         ),
-        const SizedBox(height: 32),
-
-        // Trust Banner
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(12),
+        if (_step5Submitted && _selectedDuration == null)
+          const Padding(
+            padding: EdgeInsets.only(top: 8.0),
+            child: Text('Select auction duration', style: TextStyle(color: Colors.red, fontSize: 12)),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.shield, color: Colors.green[700], size: 24),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('100% Verified KYC Bidders',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: navyBlue,
-                            fontSize: 14)),
-                    const SizedBox(height: 4),
-                    const Text(
-                        'Zero seller commission for your first 2 sales. Direct encrypted escrow transfers.',
-                        style: TextStyle(
-                            color: Colors.grey, fontSize: 12, height: 1.4)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        const SizedBox(height: 48),
 
         const SizedBox(height: 48),
 
         // Submit Button
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: () async {
-              if (!SubscriptionStore().isActive) {
-                _showSubscriptionExpiredDialog();
-                return;
-              }
-              if (widget.isEditMode) {
-                context.pop(true);
-              } else {
-                final phone = AuthService().currentPhone;
-                final normalizedPhone = ProfileStorageHelper.normalizePhone(phone!);
-                final prefs = await SharedPreferences.getInstance();
-                final realName = prefs.getString('user_name_$normalizedPhone') ?? 'Unknown Seller';
-
-                LocalListingsStore().addListing({
-                  'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                  'title': 'Vehicle Title',
-                  'price': '₹15.0 L',
-                  'sellerName': realName,
-                  'location': 'Mumbai',
-                  'stateCode': 'MH-01',
-                  'timeAgo': 'Just now',
-                  'type': 'Dealer',
-                  'rcStatus': 'Clear',
-                  'inspection': '4.5 / 5.0',
-                  'imageUrl':
-                      'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=300&q=80',
-                  'tag': 'New',
-                  'inspectionReportBytes': inspectionReportFile?.bytes,
-                });
-                AdminNotificationStore().addNotification(
-                    'New listing submitted: Vehicle Title by $realName — awaiting approval',
-                    'listing');
-                context.push('/confirmation/listing');
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: orange,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              elevation: 0,
-            ),
+        Builder(
+          builder: (context) {
+            bool isStep5Valid = _priceController.text.trim().isNotEmpty && _selectedDuration != null;
+            return SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: isStep5Valid ? () async {
+                  if (!SubscriptionStore().isActive) {
+                    _showSubscriptionExpiredDialog();
+                    return;
+                  }
+                  _handleFinalSubmit();
+                } : () {
+                  setState(() => _step5Submitted = true);
+                  List<String> errors = [];
+                  if (_priceController.text.trim().isEmpty) errors.add("Enter expected price");
+                  if (_selectedDuration == null) errors.add("Select auction duration");
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(errors.join(', ')),
+                    backgroundColor: Colors.red,
+                  ));
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isStep5Valid ? orange : Colors.grey,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  elevation: 0,
+                ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  widget.isEditMode
-                      ? 'Update Listing'
-                      : 'Submit for Admin Verification',
+                  _isSubmitting
+                      ? 'Saving...'
+                      : (widget.isEditMode
+                          ? 'Update Listing'
+                          : 'Submit for Admin Verification'),
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(width: 8),
-                const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+                if (_isSubmitting)
+                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                else
+                  const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
               ],
             ),
-          ),
+            ),
+          );
+          },
         ),
         const SizedBox(height: 24),
         Center(
@@ -1987,7 +2410,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         height: 100,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? navyBlue : Colors.white,
+          color: isSelected ? navyBlue.withValues(alpha: 0.05) : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? navyBlue : Colors.grey[300]!,
@@ -2002,13 +2425,13 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isSelected ? orange : orange.withOpacity(0.1),
+                  color: orange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   badge,
                   style: TextStyle(
-                    color: isSelected ? Colors.white : orange,
+                    color: orange,
                     fontSize: 8,
                     fontWeight: FontWeight.bold,
                   ),
@@ -2018,15 +2441,15 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
               duration,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.white : navyBlue,
+                color: navyBlue,
                 fontSize: 14,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               subLabel,
-              style: TextStyle(
-                color: isSelected ? Colors.white70 : Colors.grey,
+              style: const TextStyle(
+                color: Colors.grey,
                 fontSize: 10,
               ),
             ),
@@ -2041,7 +2464,8 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const SizedBox(height: 100),
-        Icon(Icons.construction, size: 64, color: navyBlue.withOpacity(0.5)),
+        Icon(Icons.construction,
+            size: 64, color: navyBlue.withValues(alpha: 0.5)),
         const SizedBox(height: 16),
         Text(
           'Step $_currentStep coming soon',
@@ -2078,33 +2502,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                       _currentStep++;
                     });
                   } else {
-                    final phone = AuthService().currentPhone;
-                    final realName = await ProfileStorageHelper.getProfileField(phone ?? '', 'user_name') ?? 
-                        (phone != null && phone.isNotEmpty ? phone : 'Unknown Seller');
-
-                    LocalListingsStore().addListing({
-                      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                      'title': 'Vehicle Title',
-                      'price': '₹15.0 L',
-                      'sellerName': realName,
-                      'phone': phone,
-                      'location': 'Mumbai',
-                      'stateCode': 'MH-01',
-                      'timeAgo': 'Just now',
-                      'type': 'Dealer',
-                      'rcStatus': 'Clear',
-                      'inspection': '4.5 / 5.0',
-                      'imageUrl':
-                          'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=300&q=80',
-                      'tag': 'New',
-                      'inspectionReportBytes': inspectionReportFile?.bytes,
-                    });
-                    AdminNotificationStore().addNotification(
-                        'New listing submitted: Vehicle Title by $realName — awaiting approval',
-                        'listing');
-                    if (mounted) {
-                      context.push('/confirmation/listing');
-                    }
+                    _handleFinalSubmit();
                   }
                 },
                 style: ElevatedButton.styleFrom(

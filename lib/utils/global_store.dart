@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 
 class GlobalStore {
   // Global notifications list

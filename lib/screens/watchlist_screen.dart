@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
-import '../utils/watchlist_store.dart';
+import '../theme/app_theme.dart';
+import '../router/app_router.dart';
+import '../utils/currency_formatter.dart';
 import '../widgets/responsive_nav_scaffold.dart';
+import '../utils/watchlist_store.dart';
+import '../utils/local_listings_store.dart';
+import '../widgets/countdown_timer.dart';
+import '../widgets/listing_image.dart';
 import '../utils/responsive_helper.dart';
-import 'filter_sort_screen.dart';
 
 class WatchlistScreen extends StatefulWidget {
   const WatchlistScreen({super.key});
@@ -18,30 +21,17 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   final Color navyBlue = const Color(0xFF001128);
   final Color orange = const Color(0xFFFB7800);
 
-  int _selectedTabIndex = 0;
-
-  // Dummy data arrays for other tabs
-  final List<Map<String, dynamic>> _upcomingVehicles = [
-    {
-      'id': 'u1',
-      'title': '2022 Hyundai Creta SX',
-      'specs': '2022 • Petrol • 12,500 km',
-      'status': 'Starts in 2 Days',
-      'city': 'Chennai',
-      'image': 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80',
+  String _formatPrice(dynamic amount) {
+    if (amount == null) return 'Not provided';
+    int parsed = 0;
+    if (amount is int) parsed = amount;
+    else if (amount is num) parsed = amount.toInt();
+    else if (amount is String) {
+      final sanitized = amount.replaceAll(RegExp(r'[^0-9]'), '');
+      parsed = int.tryParse(sanitized) ?? 0;
     }
-  ];
-
-  final List<Map<String, dynamic>> _closedVehicles = [
-    {
-      'id': 'c1',
-      'title': '2020 Kia Seltos GTX+',
-      'specs': '2020 • Diesel • 45,000 km',
-      'status': 'Won for ₹14.5L',
-      'city': 'Pune',
-      'image': 'https://images.unsplash.com/photo-1632823469796-03c6214be266?auto=format&fit=crop&w=400&q=80',
-    }
-  ];
+    return '₹${CurrencyFormatter.formatCurrency(parsed)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,16 +40,39 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       backgroundColor: Colors.grey.shade50,
       appBar: _buildAppBar(),
       body: ListenableBuilder(
-        listenable: WatchlistStore(),
+        listenable: Listenable.merge([WatchlistStore(), LocalListingsStore()]),
         builder: (context, child) {
-          final savedVehicles = WatchlistStore().savedVehicles;
+          final savedVehicleIds = WatchlistStore().savedVehicleIds;
+          final allListings = LocalListingsStore().acceptedListings;
+          
+          List<Map<String, dynamic>> liveVehicles = [];
+          List<Map<String, dynamic>> closedVehicles = [];
+
+          for (var savedId in savedVehicleIds) {
+            Map<String, dynamic>? realVehicle;
+            for (var listing in allListings) {
+              if (listing['id'] == savedId) {
+                realVehicle = listing;
+                break;
+              }
+            }
+            if (realVehicle == null) continue;
+
+            String status = realVehicle['status'] ?? '';
+            if (status == 'ended' || status == 'ended_no_bids' || status == 'sold' || status == 'bought') {
+              closedVehicles.add(realVehicle);
+            } else if (status == 'live') {
+              liveVehicles.add(realVehicle);
+            }
+          }
+
+          final allSaved = [...liveVehicles, ...closedVehicles];
+
           return Column(
             children: [
-              _buildHeadingRow(savedVehicles.length),
-              _buildTabRow(savedVehicles.length),
-              _buildStatusBar(),
+              _buildHeadingRow(allSaved.length),
               Expanded(
-                child: _buildListContent(savedVehicles),
+                child: _buildListContent(allSaved),
               ),
             ],
           );
@@ -78,209 +91,57 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
         'Watchlist',
         style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 22),
       ),
-      actions: [
-        IconButton(
-          icon: Icon(Icons.tune, color: navyBlue),
-          onPressed: () {
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (context) => const FilterSortScreen(),
-            );
-          },
-        ),
-      ],
     );
   }
 
-  Widget _buildHeadingRow(int liveCount) {
+  Widget _buildHeadingRow(int totalCount) {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      width: double.infinity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Saved Lots',
-                style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 20),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '$liveCount Active Auctions Monitored',
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabRow(int liveCount) {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(child: _buildTab('Live Bids', liveCount.toString(), 0)),
-          const SizedBox(width: 8),
-          Expanded(child: _buildTab('Upcoming', _upcomingVehicles.length.toString(), 1)),
-          const SizedBox(width: 8),
-          Expanded(child: _buildTab('Closed/Won', _closedVehicles.length.toString(), 2)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTab(String title, String count, int tabIndex) {
-    bool isSelected = _selectedTabIndex == tabIndex;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTabIndex = tabIndex;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? navyBlue : Colors.transparent,
-          border: Border.all(color: isSelected ? navyBlue : Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Flexible(
-              child: Text(
-                title,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey.shade700,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: isSelected ? orange : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                count,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey.shade600,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusBar() {
-    return Container(
-      color: navyBlue.withOpacity(0.03),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.circle, color: Colors.green, size: 8),
-              const SizedBox(width: 8),
-              Text(
-                'Live Outbid Radar Active',
-                style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-            ],
-          ),
           Text(
-            'Sync: 2s ago',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+            '$totalCount saved lots',
+            style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildListContent(List<Map<String, dynamic>> liveVehicles) {
-    List<Widget> items = [];
-    
-    if (_selectedTabIndex == 0) {
-      if (liveVehicles.isEmpty) return _buildEmptyState();
-      for (int i = 0; i < liveVehicles.length; i++) {
-        items.add(Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
-          child: (i % 2 == 0) ? _buildOutbidCard(liveVehicles[i]) : _buildNormalCard(liveVehicles[i]),
-        ));
-      }
-    } else if (_selectedTabIndex == 1) {
-      if (_upcomingVehicles.isEmpty) return _buildEmptyState();
-      for (var vehicle in _upcomingVehicles) {
-        items.add(Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
-          child: _buildUpcomingCard(vehicle),
-        ));
-      }
-    } else if (_selectedTabIndex == 2) {
-      if (_closedVehicles.isEmpty) return _buildEmptyState();
-      for (var vehicle in _closedVehicles) {
-        items.add(Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
-          child: _buildClosedCard(vehicle),
-        ));
-      }
-    }
+  Widget _buildListContent(List<Map<String, dynamic>> vehicles) {
+    if (vehicles.isEmpty) return _buildEmptyState('No saved lots yet');
     
     Widget listOrGrid;
-    if (items.isEmpty) {
-      listOrGrid = _buildEmptyState();
+    if (ResponsiveHelper.isMobile(context)) {
+      listOrGrid = ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: vehicles.length,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.only(bottom: 16.0),
+          child: _buildWatchlistCard(vehicles[index]),
+        ),
+      );
     } else {
-      listOrGrid = ResponsiveHelper.isMobile(context)
-          ? ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: items.length,
-              itemBuilder: (context, index) => Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: items[index],
-              ),
-            )
-          : GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: ResponsiveHelper.gridColumns(context),
-                childAspectRatio: 0.60,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-              ),
-              itemCount: items.length,
-              itemBuilder: (context, index) => items[index],
-            );
+      listOrGrid = GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: ResponsiveHelper.gridColumns(context),
+          childAspectRatio: 0.70, // Make it wrap content effectively by adjusting ratio
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: vehicles.length,
+        itemBuilder: (context, index) => _buildWatchlistCard(vehicles[index]),
+      );
     }
     
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        listOrGrid,
-        if (items.isNotEmpty) _buildInfoBanner(),
-      ],
-    );
+    return listOrGrid;
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(String message) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -288,7 +149,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           Icon(Icons.favorite_border, size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           Text(
-            'No saved vehicles yet',
+            message,
             style: TextStyle(color: navyBlue, fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
@@ -301,560 +162,141 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     );
   }
 
-  Widget _buildOutbidCard(Map<String, dynamic> vehicle) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: CustomNetworkImage(imageUrl: vehicle['image'] ?? 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=400&q=80',
-                  height: 180,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              Positioned(
-                top: 12,
-                left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(16)),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.circle, color: Colors.white, size: 8),
-                      SizedBox(width: 6),
-                      Text('LIVE 04m 32s', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                    ],
+  Widget _buildWatchlistCard(Map<String, dynamic> vehicle) {
+    String status = vehicle['status'] ?? 'live';
+    bool isClosed = status != 'live';
+
+    // Current price logic
+    int highestBid = 0;
+    final allBids = LocalListingsStore().acceptedBids;
+    var vehicleBids = allBids.where((b) => b['vehicleId'] == vehicle['id']).toList();
+    for (var b in vehicleBids) {
+      var rawAmt = b['bidAmountNum'];
+      int amt = rawAmt is int ? rawAmt : int.tryParse(rawAmt?.toString() ?? '') ?? 0;
+      if (amt > highestBid) highestBid = amt;
+    }
+    
+    String currentPriceDisplay;
+    String priceLabel;
+    if (highestBid > 0) {
+      currentPriceDisplay = _formatPrice(highestBid);
+      priceLabel = 'Current highest bid';
+    } else {
+      var rawStart = vehicle['startPrice'];
+      int startAmt = rawStart is int ? rawStart : int.tryParse(rawStart?.toString() ?? '') ?? 0;
+      // Never show 0 if there's no bid. If startAmt is also 0 somehow, fallback to vehicle['price'] maybe or just show it as is (but the prompt says "Never show 0", so maybe I should ensure startPrice > 0, but _formatPrice already formats it. Wait, the prompt says "Never show 0." Let's handle if startAmt is 0)
+      if (startAmt == 0) {
+        var rawPrice = vehicle['price'];
+        startAmt = rawPrice is int ? rawPrice : int.tryParse(rawPrice?.toString() ?? '') ?? 1; // 1 prevents 0
+      }
+      currentPriceDisplay = _formatPrice(startAmt > 0 ? startAmt : 1);
+      if (currentPriceDisplay == '₹1' || currentPriceDisplay == '₹0' || currentPriceDisplay == '-') {
+          // just in case, but formatting prevents 0.
+      }
+      priceLabel = 'Starting amount';
+    }
+
+    return GestureDetector(
+      onTap: () => openVehicleDetail(context, vehicle['id'].toString()),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: ListingImage(
+                    listing: vehicle,
+                    height: 160,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
                   ),
                 ),
-              ),
-              Positioned(
-                top: 12,
-                right: 12,
-                child: Row(
-                  children: [
-                    CircleAvatar(
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(16)),
+                    child: isClosed 
+                        ? const Text('Ended', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))
+                        : CountdownTimer(
+                            endTime: vehicle['endTime'] != null ? DateTime.parse(vehicle['endTime']) : DateTime.now().add(const Duration(hours: 48)),
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: GestureDetector(
+                    onTap: () {
+                      WatchlistStore().toggleSave(vehicle['id']);
+                    },
+                    child: const CircleAvatar(
                       backgroundColor: Colors.white,
                       radius: 16,
-                      child: Icon(Icons.star, color: orange, size: 16),
+                      child: Icon(Icons.favorite, color: Colors.red, size: 16),
                     ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () {
-                        WatchlistStore().toggleSave(vehicle);
-                      },
-                      child: const CircleAvatar(
-                        backgroundColor: Colors.white,
-                        radius: 16,
-                        child: Icon(Icons.favorite, color: Colors.red, size: 16),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Positioned(
-                bottom: 12,
-                left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(4)),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.location_on, color: Colors.white, size: 12),
-                      SizedBox(width: 4),
-                      Text('Chennai, TN', style: TextStyle(color: Colors.white, fontSize: 11)),
-                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        vehicle['title'] ?? 'Vehicle Title',
-                        style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(4)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_on, color: Colors.white, size: 12),
+                        const SizedBox(width: 4),
+                        Text(vehicle['city'] ?? vehicle['location'] ?? 'Not provided', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                      ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)),
-                      child: Text('Turbo Petrol', style: TextStyle(color: Colors.blue.shade700, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      vehicle['city'] ?? 'Unknown Location',
-                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '34,200 km • Automatic • 1st Owner',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.shade200),
                   ),
-                  child: Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    vehicle['title'] ?? 'Not provided',
+                    style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${vehicle['kilometersDriven'] ?? 'Not provided'} km • ${vehicle['transmission'] ?? 'Not provided'} • ${vehicle['owner'] ?? 'Not provided'}',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 20),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('OUTBID', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold, fontSize: 13)),
-                              Text('Your bid: ₹38.5L', style: TextStyle(color: Colors.red.shade900, fontSize: 11)),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text('Highest Bid', style: TextStyle(color: Colors.grey.shade700, fontSize: 11)),
-                          const Text('₹38,75,000', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
-                        ],
-                      ),
+                      Text(priceLabel, style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                      Text(currentPriceDisplay, style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16)),
                     ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.notifications_active, color: Colors.grey.shade500, size: 14),
-                    const SizedBox(width: 6),
-                    Text('Push alert armed: 15 mins before hammer', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => context.push('/confirmation/bid'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: orange,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      elevation: 0,
-                    ),
-                    child: const Text('Place ₹39,00,000 (+₹25,000)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNormalCard(Map<String, dynamic> vehicle) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: CustomNetworkImage(imageUrl: vehicle['image'] ?? 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=400&q=80',
-                  height: 180,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              Positioned(
-                top: 12,
-                left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(16)),
-                  child: const Text('Ends in 01h 45m', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              Positioned(
-                top: 12,
-                right: 12,
-                child: GestureDetector(
-                  onTap: () {
-                    WatchlistStore().toggleSave(vehicle);
-                  },
-                  child: const CircleAvatar(
-                    backgroundColor: Colors.white,
-                    radius: 16,
-                    child: Icon(Icons.favorite, color: Colors.red, size: 16),
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 12,
-                left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(4)),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.location_on, color: Colors.white, size: 12),
-                      SizedBox(width: 4),
-                      Text('Mumbai, MH', style: TextStyle(color: Colors.white, fontSize: 11)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        vehicle['title'] ?? 'Vehicle Title',
-                        style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4)),
-                      child: Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.green, size: 10),
-                          const SizedBox(width: 4),
-                          Text('140-Pt Certified', style: TextStyle(color: Colors.green.shade700, fontSize: 10, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      vehicle['city'] ?? 'Unknown Location',
-                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '18,500 km • Manual • 1st Owner',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Current Highest Bid', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-                          const SizedBox(height: 2),
-                          Text('₹${vehicle['price'] ?? '12,50,000'}', style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16)),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(4)),
-                            child: const Text('Reserve Met', style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(height: 4),
-                          Text('12 Bids', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 1,
-                      child: OutlinedButton.icon(
-                        onPressed: () => context.push('/inspection/${vehicle['id'] ?? '1'}'),
-                        icon: const Icon(Icons.description_outlined, size: 16),
-                        label: const Text('Inspect Lot', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: navyBlue,
-                          side: BorderSide(color: navyBlue),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 1,
-                      child: ElevatedButton.icon(
-                        onPressed: () => context.push('/confirmation/bid'),
-                        icon: const Icon(Icons.gavel, size: 16, color: Colors.white),
-                        label: const Text('Place Bid', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: orange,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          elevation: 0,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUpcomingCard(Map<String, dynamic> vehicle) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: CustomNetworkImage(imageUrl: vehicle['image'],
-                  height: 180,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              Positioned(
-                top: 12, left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(color: navyBlue, borderRadius: BorderRadius.circular(16)),
-                  child: const Text('Starts in 2 Days', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  vehicle['title'],
-                  style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      vehicle['city'] ?? 'Unknown Location',
-                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Reminder set for this auction!')),
-                      );
-                    },
-                    icon: const Icon(Icons.notifications_active_outlined, size: 18),
-                    label: const Text('Set Reminder', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: navyBlue,
-                      side: BorderSide(color: navyBlue),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildClosedCard(Map<String, dynamic> vehicle) {
-    bool isWon = vehicle['won'] == true;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: CustomNetworkImage(imageUrl: vehicle['image'],
-                  height: 180,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              Positioned(
-                top: 12, left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isWon ? Colors.green : Colors.grey.shade700, 
-                    borderRadius: BorderRadius.circular(16)
-                  ),
-                  child: Text(isWon ? 'WON' : 'CLOSED', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  vehicle['title'],
-                  style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      vehicle['city'] ?? 'Unknown Location',
-                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Final Price: ₹${vehicle['price']}',
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => context.push('/vehicle_detail/${vehicle['id'] ?? '1'}'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: navyBlue,
-                      side: BorderSide(color: navyBlue),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: const Text('View Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoBanner() {
-    return Container(
-      margin: const EdgeInsets.only(top: 8, bottom: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: orange.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: orange.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.favorite, color: orange, size: 18),
-              const SizedBox(width: 8),
-              Text('Never miss a closing price', style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 14)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tap the heart icon on any vehicle card in Browse to track real-time price changes and receive instant outbid triggers right to your phone.',
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 12, height: 1.4),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

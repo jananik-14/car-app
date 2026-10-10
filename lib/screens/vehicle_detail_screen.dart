@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import 'package:provider/provider.dart';
 import '../utils/watchlist_store.dart';
 import 'package:share_plus/share_plus.dart';
-import '../widgets/custom_network_image.dart';
+import '../utils/blob_storage.dart';
+import '../widgets/listing_image.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
 import '../services/admin_notification_store.dart';
@@ -38,19 +38,64 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   final Color navy = const Color(0xFF001128);
   final Color orange = const Color(0xFFFB7800);
 
-  int currentBid = 3850000;
-  int offerAmount = 3875000;
-
   // Mock variables for testing banners
   bool hasUserBid = false;
   bool isHighestBidder = false;
 
   late TextEditingController _offerController;
+  int _currentImageIndex = 0;
+
+  Map<String, dynamic> get _vehicleData {
+    final store = LocalListingsStore();
+    final allListings = [...store.acceptedListings, ...store.pendingListings, ...store.rejectedListings];
+    final liveData = allListings.firstWhere((l) => l['id'] == widget.vehicleId, orElse: () => <String, dynamic>{});
+    if (liveData.isNotEmpty) return liveData;
+    
+    return widget.vehicleData ?? {
+      'id': widget.vehicleId,
+      'title': '2022 Audi Q5 45 TFSI Quattro',
+      'year': '2022',
+      'name': 'Audi Q5 45 TFSI Quattro',
+      'currentBid': '38,50,000',
+      'location': 'KA-01',
+      'bidsPlaced': '18',
+    };
+  }
+
+  int get liveCurrentBid {
+    final currentBidVal = _vehicleData['currentBid'] ?? _vehicleData['price'] ?? _vehicleData['bid'] ?? '0';
+    String str = currentBidVal.toString().trim();
+    if (str.toUpperCase().contains('L')) {
+      String numStr = str.replaceAll(RegExp(r'[^0-9.]'), '');
+      double val = double.tryParse(numStr) ?? 0;
+      return (val * 100000).toInt();
+    }
+    String currentBidStr = str.replaceAll(RegExp(r'[^0-9]'), '');
+    return int.tryParse(currentBidStr) ?? 0;
+  }
+
+  int get startingAmount {
+    final priceVal = _vehicleData['price'] ?? _vehicleData['bid'] ?? '0';
+    String str = priceVal.toString().trim();
+    if (str.toUpperCase().contains('L')) {
+      String numStr = str.replaceAll(RegExp(r'[^0-9.]'), '');
+      double val = double.tryParse(numStr) ?? 0;
+      return (val * 100000).toInt();
+    }
+    String priceStr = str.replaceAll(RegExp(r'[^0-9]'), '');
+    return int.tryParse(priceStr) ?? 0;
+  }
+
+  String formatAsLakh(int rupees) {
+    if (rupees >= 100000) {
+      return '₹${(rupees / 100000).toStringAsFixed(1)} L';
+    }
+    return '₹${_formatCurrency(rupees)}';
+  }
 
   int get minimumRequiredBid {
-    int bidsPlaced = int.tryParse(_vehicleData['bidsPlaced'].toString()) ?? 0;
-    if (bidsPlaced == 0) return currentBid;
-    return currentBid + 5000; // Mock minimum increment
+    int current = liveCurrentBid;
+    return current + 2000;
   }
 
   BidValidationState get bidState {
@@ -62,15 +107,40 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         : BidValidationState.invalid;
   }
 
+  final PageController _pageController = PageController();
+  int _photoCount = 1;
+
   @override
   void initState() {
     super.initState();
-    _offerController =
-        TextEditingController(text: _formatCurrency(offerAmount));
+    _offerController = TextEditingController();
+    _determinePhotoCount();
+  }
+
+  Future<void> _determinePhotoCount() async {
+    final String id = widget.vehicleId;
+    final String phone = _vehicleData['sellerPhone']?.toString() ?? _vehicleData['dealerPhone']?.toString() ?? 'unknown_phone';
+    final baseKey = '$phone/$id';
+    
+    int count = 0;
+    final blob = BlobStorage();
+    for (int i = 0; i <= 5; i++) {
+      final bytes = await blob.get('$baseKey/photo_$i');
+      if (bytes != null) {
+        count = i + 1;
+      }
+    }
+    if (count == 0) count = 1;
+    if (mounted) {
+      setState(() {
+        _photoCount = count;
+      });
+    }
   }
 
   @override
   void dispose() {
+    _pageController.dispose();
     _offerController.dispose();
     super.dispose();
   }
@@ -81,13 +151,13 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     String lastThree = str.substring(str.length - 3);
     String otherNumbers = str.substring(0, str.length - 3);
     if (otherNumbers.isNotEmpty) {
-      lastThree = ',' + lastThree;
+      lastThree = ',$lastThree';
     }
     String result = '';
     for (int i = otherNumbers.length - 1, count = 1; i >= 0; i--, count++) {
       result = otherNumbers[i] + result;
       if (count % 2 == 0 && i != 0) {
-        result = ',' + result;
+        result = ',$result';
       }
     }
     return result + lastThree;
@@ -96,29 +166,17 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   void _incrementOffer(int amount) {
     _checkSubscriptionAndProceed(() {
       setState(() {
-        int baseAmount = offerAmount;
-        if (offerAmount == 0) {
-          final entered =
-              int.tryParse(_offerController.text.replaceAll(',', '')) ?? 0;
-          baseAmount = entered > 0 ? entered : currentBid;
-        }
-        offerAmount = baseAmount + amount;
-        _offerController.text = _formatCurrency(offerAmount);
+        String currentText = _offerController.text.replaceAll(',', '').replaceAll('₹', '').trim();
+        int currentFieldValue = int.tryParse(currentText) ?? liveCurrentBid;
+        int newAmount = currentFieldValue + amount;
+        _offerController.text = _formatCurrency(newAmount);
+        _onOfferChanged(_offerController.text);
       });
     });
   }
 
   void _onOfferChanged(String value) {
-    String cleanValue = value.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanValue.isNotEmpty) {
-      setState(() {
-        offerAmount = int.parse(cleanValue);
-      });
-    } else {
-      setState(() {
-        offerAmount = 0;
-      });
-    }
+    setState(() {}); // Trigger rebuild to update validation colors
   }
 
   void _checkSubscriptionAndProceed(VoidCallback onProceed) {
@@ -188,25 +246,13 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     );
   }
 
-  Map<String, dynamic> get _vehicleData =>
-      widget.vehicleData ??
-      {
-        'id': widget.vehicleId,
-        'title': '2022 Audi Q5 45 TFSI Quattro',
-        'image':
-            'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80',
-        'year': '2022',
-        'name': 'Audi Q5 45 TFSI Quattro',
-        'currentBid': _formatCurrency(currentBid),
-        'location': 'KA-01',
-        'bidsPlaced': '18',
-      };
+  // Map<String, dynamic> get _vehicleData => ... removed, defined above
 
   Future<void> _shareVehicle() async {
     final vehicle = _vehicleData;
     final String message =
         "Check out this ${vehicle['year']} ${vehicle['name']} on Wheels2Drive!\n"
-        "💰 Current Bid: ₹${vehicle['currentBid']}\n"
+        "💰 Current Highest Bid: ${formatAsLakh(liveCurrentBid)}\n"
         "📍 Location: ${vehicle['location']}\n"
         "⏱ ${vehicle['bidsPlaced']} Bids Placed\n"
         "🔗 View details: https://wheels2drive.app/vehicle/${vehicle['id']}";
@@ -235,12 +281,133 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
   }
 
+  Widget _buildImageGallery() {
+    return Column(
+      children: [
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              height: 250,
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: _photoCount,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentImageIndex = index;
+                  });
+                },
+                itemBuilder: (context, index) {
+                  return ListingImage(
+                    listing: _vehicleData,
+                    index: index,
+                    height: 250,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  );
+                },
+              ),
+            ),
+            if (_photoCount > 1) ...[
+              Positioned(
+                left: 16,
+                child: CircleAvatar(
+                  backgroundColor: Colors.black.withValues(alpha: 0.5),
+                  child: IconButton(
+                    icon: const Icon(Icons.chevron_left, color: Colors.white),
+                    onPressed: () {
+                      if (_currentImageIndex > 0) {
+                        _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                      }
+                    },
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 16,
+                child: CircleAvatar(
+                  backgroundColor: Colors.black.withValues(alpha: 0.5),
+                  child: IconButton(
+                    icon: const Icon(Icons.chevron_right, color: Colors.white),
+                    onPressed: () {
+                      if (_currentImageIndex < _photoCount - 1) {
+                        _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (_photoCount > 1)
+          Container(
+            height: 60,
+            margin: const EdgeInsets.only(top: 8),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _photoCount,
+              itemBuilder: (context, index) {
+                return GestureDetector(
+                  onTap: () {
+                    _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                  },
+                  child: Container(
+                    width: 60,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: _currentImageIndex == index ? orange : Colors.transparent,
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: ListingImage(
+                        listing: _vehicleData,
+                        index: index,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _buildSpecs(Map<String, dynamic> data) {
+    List<String> parts = [];
+    final loc = data['locationDisplay'] ?? data['location'] ?? data['city'];
+    if (loc != null && loc.toString().isNotEmpty) parts.add(loc.toString());
+    final reg = data['regNo'] ?? data['registrationNumber'];
+    if (reg != null && reg.toString().isNotEmpty) parts.add(reg.toString());
+    final km = data['kilometersDriven'];
+    if (km != null && km.toString().isNotEmpty) parts.add('${km.toString()} KM');
+    final fuel = data['fuelType'];
+    final trans = data['transmission'];
+    if (fuel != null && fuel.toString().isNotEmpty && trans != null && trans.toString().isNotEmpty) {
+      parts.add('${fuel.toString()} ${trans.toString()}');
+    } else if (fuel != null && fuel.toString().isNotEmpty) {
+      parts.add(fuel.toString());
+    } else if (trans != null && trans.toString().isNotEmpty) {
+      parts.add(trans.toString());
+    }
+    return parts.join(' • ');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final int enteredOffer =
-        int.tryParse(_offerController.text.replaceAll(',', '')) ?? 0;
-    int difference = enteredOffer - currentBid;
-    int bidsPlaced = int.tryParse(_vehicleData['bidsPlaced'].toString()) ?? 0;
+    return ListenableBuilder(
+      listenable: LocalListingsStore(),
+      builder: (context, _) {
+        final int enteredOffer =
+            int.tryParse(_offerController.text.replaceAll(',', '')) ?? 0;
+        int difference = enteredOffer - liveCurrentBid;
+    int bidsPlaced = int.tryParse(_vehicleData['bidsPlaced']?.toString() ?? '0') ?? 0;
 
     return ResponsiveSecondaryScaffold(
       currentIndex: 0,
@@ -255,16 +422,16 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             if (context.canPop()) {
               context.pop();
             } else {
-              context.go('/');
+              context.go('/browse');
             }
           },
         ),
-        title: Row(
+        title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.directions_car, color: Colors.black, size: 20),
-            const SizedBox(width: 8),
-            const Text(
+            Icon(Icons.directions_car, color: Colors.black, size: 20),
+            SizedBox(width: 8),
+            Text(
               'Vehicle Detai...',
               style: TextStyle(
                   color: Colors.black,
@@ -296,12 +463,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             // Image Section
             Stack(
               children: [
-                CustomNetworkImage(
-                  imageUrl: _vehicleData['image'],
-                  width: double.infinity,
-                  height: 250,
-                  fit: BoxFit.cover,
-                ),
+                _buildImageGallery(),
                 // Back Arrow overlay on image
                 Positioned(
                   top: 16,
@@ -316,7 +478,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                         if (context.canPop()) {
                           context.pop();
                         } else {
-                          context.go('/');
+                          context.go('/browse');
                         }
                       },
                     ),
@@ -333,8 +495,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                         color: orange,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Row(
-                        children: const [
+                      child: const Row(
+                        children: [
                           Icon(Icons.hourglass_empty,
                               color: Colors.white, size: 12),
                           SizedBox(width: 6),
@@ -358,8 +520,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                         color: orange,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Row(
-                        children: const [
+                      child: const Row(
+                        children: [
                           Icon(Icons.circle, color: Colors.white, size: 8),
                           SizedBox(width: 6),
                           Text('LIVE AUCTION',
@@ -381,7 +543,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                     child: ListenableBuilder(
                       listenable: WatchlistStore(),
                       builder: (context, child) {
-                        bool isSaved = WatchlistStore().isSaved(_vehicleData);
+                        bool isSaved = WatchlistStore().isSaved(_vehicleData['id']);
                         return IconButton(
                           icon: Icon(
                             isSaved ? Icons.bookmark : Icons.bookmark_border,
@@ -389,7 +551,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                             size: 20,
                           ),
                           onPressed: () {
-                            WatchlistStore().toggleSave(_vehicleData);
+                            WatchlistStore().toggleSave(_vehicleData['id']);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(isSaved
@@ -412,11 +574,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
+                      color: Colors.black.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Row(
-                      children: const [
+                    child: const Row(
+                      children: [
                         Icon(Icons.access_time, color: Colors.white, size: 16),
                         SizedBox(width: 6),
                         Text('Ends in 04m 32s',
@@ -428,30 +590,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                     ),
                   ),
                 ),
-                // Inspected
-                Positioned(
-                  bottom: 16,
-                  right: 16,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.check_circle, color: Colors.green, size: 16),
-                        SizedBox(width: 6),
-                        Text('140-Pt Inspected',
-                            style: TextStyle(
-                                color: Colors.black,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                ),
+
               ],
             ),
 
@@ -461,9 +600,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Vehicle Info
-                  const Text(
-                    'KA-01 • DL3849 • 24,800 KM • Petrol Automatic',
-                    style: TextStyle(
+                  Text(
+                    _buildSpecs(_vehicleData),
+                    style: const TextStyle(
                         color: Colors.grey,
                         fontSize: 13,
                         fontWeight: FontWeight.w500),
@@ -506,7 +645,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                             child: Text(
                               isHighestBidder
                                   ? "You're currently the highest bidder!"
-                                  : "You've been outbid! Current highest is ₹${_formatCurrency(currentBid)}",
+                                  : "You've been outbid! Current highest is ₹${_formatCurrency(liveCurrentBid)}",
                               style: TextStyle(
                                 color: isHighestBidder
                                     ? const Color(0xFF16A34A)
@@ -550,7 +689,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                                             fontSize: 12,
                                             fontWeight: FontWeight.w600)),
                                     const SizedBox(height: 4),
-                                    Text('₹${_vehicleData['currentBid']}',
+                                    Text(formatAsLakh(liveCurrentBid),
                                         style: TextStyle(
                                             color: navy,
                                             fontSize: 24,
@@ -562,7 +701,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: orange.withOpacity(0.1),
+                                  color: orange.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
@@ -618,13 +757,13 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('CURRENT HIGHEST BID',
+                                  const Text('STARTING AMOUNT',
                                       style: TextStyle(
                                           color: Colors.grey,
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600)),
                                   const SizedBox(height: 4),
-                                  Text('₹${_vehicleData['currentBid']}',
+                                  Text(formatAsLakh(startingAmount),
                                       style: TextStyle(
                                           color: navy,
                                           fontSize: 24,
@@ -638,217 +777,285 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                                       fontWeight: FontWeight.w600)),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              const Icon(Icons.circle,
-                                  color: Colors.green, size: 8),
-                              const SizedBox(width: 8),
-                              Text('Reserve met • Fast-track transfer verified',
-                                  style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                      fontSize: 13)),
-                            ],
-                          ),
+                          const SizedBox.shrink(),
                         ],
                       ),
                     ),
                   const SizedBox(height: 24),
 
-                  // Instant Increments
-                  const Text('Instant Increments',
-                      style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildIncrementButton(2000),
-                      _buildIncrementButton(5000),
-                      _buildIncrementButton(10000),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Your Offer Input
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Your Offer',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text('Min: ₹${_formatCurrency(minimumRequiredBid)}',
-                          style: TextStyle(
-                              color: Colors.grey.shade600, fontSize: 14)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(
-                        color: bidState == BidValidationState.valid
-                            ? const Color(0xFF22C55E) // Green
-                            : bidState == BidValidationState.invalid
-                                ? const Color(0xFFEF4444) // Red
-                                : Colors.grey.shade300, // Neutral
-                        width: bidState == BidValidationState.empty ? 1 : 2,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: TextField(
-                      controller: _offerController,
-                      keyboardType: TextInputType.number,
-                      onChanged: _onOfferChanged,
-                      style: const TextStyle(
-                          fontSize: 24, fontWeight: FontWeight.bold),
-                      decoration: const InputDecoration(
-                        prefixText: '₹ ',
-                        prefixStyle: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black),
-                        border: InputBorder.none,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Validation Helper text
-                  if (bidState == BidValidationState.empty)
-                    Row(
-                      children: [
-                        const SizedBox(width: 4),
-                        Text(
-                          'Enter an amount of at least ₹${_formatCurrency(minimumRequiredBid)}',
-                          style:
-                              const TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
-                      ],
-                    )
-                  else if (bidState == BidValidationState.valid)
-                    Row(
-                      children: [
-                        const Icon(Icons.check_circle,
-                            color: Color(0xFF22C55E), size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Valid bid — increases current bid by ₹${_formatCurrency(difference)}',
-                          style: const TextStyle(
-                              color: Color(0xFF16A34A),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    )
-                  else
-                    Row(
-                      children: [
-                        const Icon(Icons.cancel,
-                            color: Color(0xFFEF4444), size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Bid too low — minimum is ₹${_formatCurrency(minimumRequiredBid)}',
-                          style: const TextStyle(
-                              color: Color(0xFFDC2626),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  const SizedBox(height: 32),
-
-                  // Place Bid Button
-                  if (widget.isOwner)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: null, // Disabled for owner
-                        style: ElevatedButton.styleFrom(
-                          disabledBackgroundColor: Colors.grey.shade300,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
-                        ),
-                        child: const Text('You cannot bid on your own listing',
-                            style: TextStyle(
-                                color: Colors.black54,
+                  // Bidding Section
+                  Builder(
+                    builder: (context) {
+                      final currentPhone = ProfileStorageHelper.normalizePhone(AuthService().currentPhone ?? '');
+                      final sellerPhone = ProfileStorageHelper.normalizePhone(_vehicleData['phone'] ?? _vehicleData['sellerPhone'] ?? '');
+                      final isActualOwner = widget.isOwner || (currentPhone.isNotEmpty && sellerPhone.isNotEmpty && currentPhone == sellerPhone);
+                      if (_vehicleData['status'] == 'ended' || _vehicleData['status'] == 'ended_no_bids') {
+                        final store = LocalListingsStore();
+                        final bids = store.acceptedBids.where((b) => b['vehicleId'] == widget.vehicleId).toList();
+                        int highest = 0;
+                        String? winnerPhone;
+                        for (var b in bids) {
+                          var rawAmt = b['bidAmountNum'];
+                          int amt = rawAmt is int ? rawAmt : int.tryParse(rawAmt?.toString() ?? '') ?? 0;
+                          if (amt > highest) {
+                            highest = amt;
+                            winnerPhone = b['bidderPhone'] ?? b['bidderUsername'];
+                          }
+                        }
+                        
+                        final bool userWon = highest > 0 && winnerPhone == currentPhone;
+                        
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: userWon ? Colors.green.withOpacity(0.1) : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(12),
+                            border: userWon ? Border.all(color: Colors.green) : null,
+                          ),
+                          child: Center(
+                            child: Text(
+                              userWon ? 'You won this auction' : 'Auction ended',
+                              style: TextStyle(
+                                color: userWon ? Colors.green : Colors.grey.shade600,
                                 fontSize: 16,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                    )
-                  else
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: (bidState == BidValidationState.valid)
-                            ? () {
-                                _checkSubscriptionAndProceed(() async {
-                                  final bidAmount = _offerController.text;
-                                  final title =
-                                      _vehicleData['title'] ?? 'Vehicle';
-                                  final bidId =
-                                      'b_new_${DateTime.now().millisecondsSinceEpoch}';
-
-                                  final phoneStr = AuthService().currentPhone;
-                                  final normalizedPhone = ProfileStorageHelper.normalizePhone(phoneStr!);
-                                  final prefs = await SharedPreferences.getInstance();
-                                  final realName = prefs.getString('user_name_$normalizedPhone') ?? 'Current User';
-
-                                  LocalListingsStore().addPendingBid({
-                                    'id': bidId,
-                                    'auctionId':
-                                        'A-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-                                    'title': title,
-                                    'bidAmount': '₹$bidAmount',
-                                    'timeAgo': 'Just now',
-                                    'bidderName': realName,
-                                    'bidderUsername': phoneStr,
-                                    'dealerId': 'D-1234',
-                                    'depositPaid': true,
-                                    'depositAmount': '₹10,000',
-                                    'escrow': 'Secured',
-                                    'score': '4.5 / 5.0',
-                                  });
-
-                                  AdminNotificationStore().addNotification(
-                                      'New bid placed: ₹$bidAmount on $title by $realName',
-                                      'bid',
-                                      relatedItemId: bidId);
-                                  if (mounted) {
-                                    context.push('/confirmation/bid');
-                                  }
-                                });
-                              }
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: orange,
-                          disabledBackgroundColor: Colors.grey.shade300,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.gavel, color: Colors.white),
-                            SizedBox(width: 8),
-                            Text('Place Bid',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                    ),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      
+                      if (isActualOwner) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Your listing',
+                              style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Instant Increments
+                          const Text('Instant Increments',
+                              style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _buildIncrementButton(2000),
+                              _buildIncrementButton(5000),
+                              _buildIncrementButton(10000),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+        
+                          // Your Offer Input
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Your Offer',
+                                  style: TextStyle(
+                                      fontSize: 16, fontWeight: FontWeight.bold)),
+                              Text('Current Highest Bid: ₹${_formatCurrency(liveCurrentBid)}',
+                                  style: TextStyle(
+                                      color: Colors.grey.shade600, fontSize: 14, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(
+                                color: bidState == BidValidationState.valid
+                                    ? const Color(0xFF22C55E) // Green
+                                    : bidState == BidValidationState.invalid
+                                        ? const Color(0xFFEF4444) // Red
+                                        : Colors.grey.shade300, // Neutral
+                                width: bidState == BidValidationState.empty ? 1 : 2,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextField(
+                              controller: _offerController,
+                              keyboardType: TextInputType.number,
+                              onChanged: _onOfferChanged,
+                              style: const TextStyle(
+                                  fontSize: 24, fontWeight: FontWeight.bold),
+                              decoration: InputDecoration(
+                                hintText: _formatCurrency(minimumRequiredBid),
+                                prefixText: '₹ ',
+                                prefixStyle: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black),
+                                border: InputBorder.none,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+        
+                          // Validation Helper text
+                          if (bidState == BidValidationState.empty)
+                            Row(
+                              children: [
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Enter an amount of at least ₹${_formatCurrency(minimumRequiredBid)}',
+                                  style:
+                                      const TextStyle(color: Colors.grey, fontSize: 13),
+                                ),
+                              ],
+                            )
+                          else if (bidState == BidValidationState.valid)
+                            Row(
+                              children: [
+                                const Icon(Icons.check_circle,
+                                    color: Color(0xFF22C55E), size: 18),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Valid bid — increases current bid by ₹${_formatCurrency(difference)}',
+                                  style: const TextStyle(
+                                      color: Color(0xFF16A34A),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            )
+                          else
+                            Row(
+                              children: [
+                                const Icon(Icons.cancel,
+                                    color: Color(0xFFEF4444), size: 18),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Bid too low — minimum is ₹${_formatCurrency(minimumRequiredBid)}',
+                                  style: const TextStyle(
+                                      color: Color(0xFFDC2626),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                          const SizedBox(height: 32),
+        
+                          // Place Bid Button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: (bidState == BidValidationState.valid)
+                                  ? () {
+                                      _checkSubscriptionAndProceed(() async {
+                                        final bidAmount = _offerController.text;
+                                        final title = _vehicleData['title'] ?? 'Vehicle';
+                                        final bidId = 'b_new_${DateTime.now().millisecondsSinceEpoch}';
+        
+                                        final phoneStr = AuthService().currentPhone;
+                                        final normalizedPhone = phoneStr != null ? ProfileStorageHelper.normalizePhone(phoneStr) : 'unknown';
+                                        final prefs = await SharedPreferences.getInstance();
+                                        final realName = prefs.getString('user_name_$normalizedPhone') ?? 'Unknown Bidder';
+        
+                                        final entered = int.tryParse(bidAmount.replaceAll(',', '')) ?? 0;
+        
+                                        // Create the real bid object directly (no pending state)
+                                        final bidObj = {
+                                          'id': bidId,
+                                          'auctionId': 'A-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+                                          'vehicleId': widget.vehicleId, // Link bid to vehicle
+                                          'title': title,
+                                          'bidAmount': '₹$bidAmount',
+                                          'bidAmountNum': entered,
+                                          'timeAgo': 'Just now',
+                                          'time': DateTime.now().toIso8601String(),
+                                          'bidderName': realName,
+                                          'bidderUsername': phoneStr ?? 'Unknown',
+                                          'dealerId': 'D-1234',
+                                          'depositPaid': true,
+                                          'depositAmount': '₹10,000',
+                                          'escrow': 'Secured',
+                                          'score': '4.5 / 5.0',
+                                          'ref': 'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+                                        };
+        
+                                        // Place bid instantly in the store
+                                        final result = LocalListingsStore().placeLiveBid(bidObj, widget.vehicleId);
+        
+                                        if (result.isSuccess) {
+                                          // Update local state variables if any
+                                          setState(() {
+                                            hasUserBid = true;
+                                            isHighestBidder = true;
+                                            _offerController.clear();
+                                          });
+        
+                                          AdminNotificationStore().addNotification(
+                                              'New live bid placed: ₹$bidAmount on $title by $realName',
+                                              'bid',
+                                              relatedItemId: bidId);
+                                          if (mounted) {
+                                            context.push('/confirmation/bid');
+                                          }
+                                        } else {
+                                          setState(() {}); // trigger validation visual update
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(result.errorMessage ?? 'Bid too low'),
+                                                backgroundColor: Colors.red,
+                                                duration: const Duration(seconds: 4),
+                                              )
+                                            );
+                                          }
+                                        }
+                                      });
+                                    }
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: orange,
+                                disabledBackgroundColor: Colors.grey.shade300,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                elevation: 0,
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.gavel, color: Colors.white),
+                                  SizedBox(width: 8),
+                                  Text('Place Bid',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                   const SizedBox(height: 24), // Bottom padding
                 ],
               ),
@@ -857,7 +1064,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         ),
       ),
     );
-  }
+    },
+  );
+}
 
   Widget _buildIncrementButton(int amount) {
     return InkWell(

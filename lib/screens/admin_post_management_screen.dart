@@ -3,10 +3,13 @@
 // GET /api/admin/vehicles/stats (for TOTAL REG./UNSOLD-PEND./BOUGHT counts)
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/admin_navigation_drawer.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../widgets/admin_app_bar.dart';
+import '../widgets/listing_image.dart';
+import '../utils/local_listings_store.dart';
 
 class AdminPostManagementScreen extends StatefulWidget {
   const AdminPostManagementScreen({super.key});
@@ -21,68 +24,33 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
 
   final Color _navy = const Color(0xFF001128);
   final Color _orange = const Color(0xFFfb7800);
+
+  String _formatPrice(dynamic amount) {
+    if (amount == null) return 'N/A';
+    if (amount is num) {
+      return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(amount);
+    }
+    return amount.toString();
+  }
   final Color _green = const Color(0xFF22C55E);
   final Color _amber = Colors.amber.shade700;
   final Color _blue = Colors.blue.shade600;
 
-  final List<Map<String, dynamic>> _dummyVehicles = [
-    {
-      'title': '2024 Mercedes-Benz C300',
-      'status': 'Sold',
-      'sellerName': 'Kunal Desai',
-      'buyerName': 'Rajesh Sharma',
-      'price': '₹48.70 L',
-      'regNo': 'MH-01-BK-9988',
-      'regDate': '12 Sep 2026',
-      'imageUrl': 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=300&q=80'
-    },
-    {
-      'title': '2022 Audi Q5 45 TFSI',
-      'status': 'Pending',
-      'sellerName': 'Priya Singh',
-      'price': '₹42.50 L',
-      'regNo': 'DL-10-CD-1122',
-      'regDate': '10 Sep 2026',
-      'imageUrl': 'https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?auto=format&fit=crop&w=300&q=80'
-    },
-    {
-      'title': '2023 Tata Harrier Dark',
-      'status': 'Available',
-      'sellerName': 'Amit Kumar',
-      'price': '₹19.20 L',
-      'regNo': 'MH-12-PQ-5544',
-      'regDate': '08 Sep 2026',
-      'imageUrl': 'https://images.unsplash.com/photo-1650392338271-9c60e3cc6c13?auto=format&fit=crop&w=300&q=80'
-    },
-    {
-      'title': '2021 BMW X3 xDrive30i',
-      'status': 'Sold',
-      'sellerName': 'Rahul Verma',
-      'buyerName': 'Sneha Patel',
-      'price': '₹55.00 L',
-      'regNo': 'KA-05-XY-8877',
-      'regDate': '05 Sep 2026',
-      'imageUrl': 'https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=300&q=80'
-    },
-    {
-      'title': '2022 Hyundai Creta SX(O)',
-      'status': 'Pending',
-      'sellerName': 'Neha Gupta',
-      'price': '₹16.80 L',
-      'regNo': 'UP-16-AB-3322',
-      'regDate': '01 Sep 2026',
-      'imageUrl': 'https://images.unsplash.com/photo-1620025792945-31ce1d94fc8b?auto=format&fit=crop&w=300&q=80'
-    },
-    {
-      'title': '2020 Maruti Suzuki Swift ZXi',
-      'status': 'Available',
-      'sellerName': 'Vikram Rathore',
-      'price': '₹6.50 L',
-      'regNo': 'RJ-14-EF-9911',
-      'regDate': '28 Aug 2026',
-      'imageUrl': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=300&q=80'
-    },
-  ];
+  List<Map<String, dynamic>> _getAllVehicles() {
+    final store = LocalListingsStore();
+    List<Map<String, dynamic>> list = [];
+    for (var v in store.pendingListings) {
+      list.add({...v, 'uiStatus': 'Pending'});
+    }
+    for (var v in store.acceptedListings) {
+      String st = (v['status'] ?? '').toString().toLowerCase();
+      String uiStatus = 'Available';
+      if (st == 'sold' || st == 'bought') uiStatus = 'Sold';
+      else if (st == 'pending') uiStatus = 'Pending';
+      list.add({...v, 'uiStatus': uiStatus});
+    }
+    return list;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -122,15 +90,20 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
           ),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(),
-          _buildStatsCards(),
-          _buildTabs(),
-          _buildSearchBar(),
-          Expanded(child: _buildListContent()),
-        ],
+      body: ListenableBuilder(
+        listenable: LocalListingsStore(),
+        builder: (context, _) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              _buildStatsCards(),
+              _buildTabs(),
+              _buildSearchBar(),
+              Expanded(child: _buildListContent()),
+            ],
+          );
+        }
       ),
     );
   }
@@ -150,15 +123,20 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
   }
 
   Widget _buildStatsCards() {
+    final all = _getAllVehicles();
+    final total = all.length;
+    final pend = all.where((v) => v['uiStatus'] == 'Pending').length;
+    final bought = all.where((v) => v['uiStatus'] == 'Sold').length;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
         children: [
-          Expanded(child: _buildStatCard('TOTAL REG.', '1,428', _navy)),
+          Expanded(child: _buildStatCard('TOTAL REG.', '$total', _navy)),
           const SizedBox(width: 12),
-          Expanded(child: _buildStatCard('UNSOLD / PEND.', '312', _orange)),
+          Expanded(child: _buildStatCard('UNSOLD / PEND.', '$pend', _orange)),
           const SizedBox(width: 12),
-          Expanded(child: _buildStatCard('BOUGHT', '1,116', _green)),
+          Expanded(child: _buildStatCard('BOUGHT', '$bought', _green)),
         ],
       ),
     );
@@ -269,9 +247,10 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
   }
 
   Widget _buildListContent() {
-    List<Map<String, dynamic>> filtered = _dummyVehicles.where((c) {
-      if (_activeTabIndex == 1 && c['status'] != 'Pending') return false;
-      if (_activeTabIndex == 2 && c['status'] != 'Sold') return false;
+    final allVehicles = _getAllVehicles();
+    List<Map<String, dynamic>> filtered = allVehicles.where((c) {
+      if (_activeTabIndex == 1 && c['uiStatus'] != 'Pending') return false;
+      if (_activeTabIndex == 2 && c['uiStatus'] != 'Sold') return false;
       
       String searchStr = "${c['title']} ${c['regNo']} ${c['sellerName']} ${c['buyerName'] ?? ''}".toLowerCase();
       return searchStr.contains(_searchQuery);
@@ -287,7 +266,7 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildListHeader(),
+          _buildListHeader(filtered.length),
           const SizedBox(height: 12),
           if (filtered.isEmpty)
             _buildNotFound()
@@ -304,7 +283,7 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
     );
   }
 
-  Widget _buildListHeader() {
+  Widget _buildListHeader(int currentCount) {
     String title = '';
     String badgeText = '';
     Color badgeColor = Colors.grey.shade200;
@@ -313,15 +292,14 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
     if (_activeTabIndex == 0) {
       return const SizedBox.shrink(); // No header row for Total Vehicles tab, per requirements
     } else if (_activeTabIndex == 1) {
-      // NOTE: 312 is the "real" count simulated, but we only have a small dummy list.
-      title = '312 Pending Vehicles';
+      title = '$currentCount Pending Vehicles';
       badgeText = 'Pending Not Sold';
-      badgeColor = _amber.withOpacity(0.15);
+      badgeColor = _amber.withValues(alpha: 0.15);
       badgeTextColor = _amber;
     } else if (_activeTabIndex == 2) {
-      title = '1,116 Bought Vehicles';
+      title = '$currentCount Bought Vehicles';
       badgeText = 'Escrow Transferred';
-      badgeColor = _green.withOpacity(0.15);
+      badgeColor = _green.withValues(alpha: 0.15);
       badgeTextColor = _green;
     }
 
@@ -360,9 +338,10 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
 
   Widget _buildVehicleCard(Map<String, dynamic> item) {
     Color statusColor = _navy;
-    if (item['status'] == 'Sold') statusColor = _green;
-    else if (item['status'] == 'Pending') statusColor = _amber;
-    else if (item['status'] == 'Available') statusColor = _blue;
+    if (item['uiStatus'] == 'Sold') {
+      statusColor = _green;
+    } else if (item['uiStatus'] == 'Pending') statusColor = _amber;
+    else if (item['uiStatus'] == 'Available') statusColor = _blue;
 
     bool isBoughtTab = _activeTabIndex == 2;
 
@@ -373,17 +352,11 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: Image.network(
-              item['imageUrl'],
-              width: 80,
+            child: ListingImage(
+              listing: item,
               height: 80,
+              width: 80,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                width: 80,
-                height: 80,
-                color: Colors.grey.shade300,
-                child: const Icon(Icons.car_crash),
-              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -396,7 +369,7 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        item['title'],
+                        item['title'] ?? 'Vehicle Title',
                         style: TextStyle(
                           color: _navy,
                           fontWeight: FontWeight.bold,
@@ -414,7 +387,7 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        item['status'],
+                        item['uiStatus'] ?? item['status'] ?? 'Available',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
@@ -426,7 +399,7 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  isBoughtTab ? 'Buyer: ${item['buyerName'] ?? 'Unknown'}' : 'Seller: ${item['sellerName']}',
+                  isBoughtTab ? 'Buyer: ${item['buyerName'] ?? 'Unknown Buyer'}' : 'Seller: ${item['sellerName'] ?? 'Unknown Seller'}',
                   style: TextStyle(
                     color: Colors.grey.shade600,
                     fontSize: 12,
@@ -436,7 +409,7 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
                 Row(
                   children: [
                     Text(
-                      item['price'],
+                      _formatPrice(item['price']),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -450,7 +423,7 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        item['regNo'],
+                        item['regNo'] ?? item['stateCode'] ?? 'Unknown Reg',
                         style: TextStyle(
                           color: Colors.grey.shade700,
                           fontSize: 10,
@@ -465,7 +438,7 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Reg: ${item['regDate']}',
+                      'Reg: ${item['regDate'] ?? 'Unknown Date'}',
                       style: TextStyle(
                         color: Colors.grey.shade500,
                         fontSize: 11,

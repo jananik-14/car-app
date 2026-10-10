@@ -5,10 +5,12 @@
 // GET /api/admin/bidding/members (Members tab data)
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/admin_navigation_drawer.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../widgets/admin_app_bar.dart';
+import '../utils/local_listings_store.dart';
 
 class AdminBiddingScreen extends StatefulWidget {
   const AdminBiddingScreen({super.key});
@@ -24,159 +26,140 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
   final Color _green = const Color(0xFF22C55E);
   final Color _red = const Color(0xFFEF4444);
 
-  // --- Dummy Data ---
-  final List<Map<String, dynamic>> _totalBids = [
-    {
-      'vehicle': '2023 Tesla Model Y',
-      'lot': '#LOT-4410 • Long Range AWD',
-      'img': 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=100&q=80',
-      'bids': '24 bids',
-      'trend': '+4 last hr',
-      'trendColor': Colors.green,
-      'highest': '₹40.25 Lakh',
-      'secondary': '(\$48,500)',
-      'status': 'Live Lot',
-      'statusColor': Colors.green,
-      'topMember': 'Rahul V.',
-      'memberId': '#MB-104',
-      'avatarColor': Colors.blue,
-    },
-    {
-      'vehicle': '1998 Porsche 911 Carrera',
-      'lot': '#LOT-4411 • Classic',
-      'img': 'https://images.unsplash.com/photo-1542282088-fe8426682b8f?auto=format&fit=crop&w=100&q=80',
-      'bids': '56 bids',
-      'trend': 'Hot Lot',
-      'trendColor': Colors.red,
-      'highest': '₹82.50 Lakh',
-      'secondary': '(\$98,200)',
-      'status': 'Ending (14m)',
-      'statusColor': Colors.orange,
-      'topMember': 'Alex T.',
-      'memberId': '#MB-082',
-      'avatarColor': Colors.purple,
-    },
-    {
-      'vehicle': '2022 Audi Q5 Prestige',
-      'lot': '#LOT-4412 • SUV',
-      'img': 'https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?auto=format&fit=crop&w=100&q=80',
-      'bids': '12 bids',
-      'trend': 'Steady',
-      'trendColor': Colors.grey,
-      'highest': '₹42.00 Lakh',
-      'secondary': '(\$50,000)',
-      'status': 'Active (2h left)',
-      'statusColor': Colors.blue,
-      'topMember': 'Sarah V8',
-      'memberId': '#MB-219',
-      'avatarColor': Colors.orange,
-    },
-    {
-      'vehicle': '2022 Ferrari F8 Tributo',
-      'lot': '#LOT-4413 • Exotic',
-      'img': 'https://images.unsplash.com/photo-1583121274602-3e2820c69888?auto=format&fit=crop&w=100&q=80',
-      'bids': '8 bids',
-      'trend': 'Top Tier',
-      'trendColor': const Color(0xFFfb7800),
-      'highest': '₹3.50 Cr',
-      'secondary': '(\$420,000)',
-      'status': 'Reserve Met',
-      'statusColor': Colors.purple,
-      'topMember': 'Vikram R.',
-      'memberId': '#MB-005',
-      'avatarColor': Colors.red,
-    },
-  ];
+  String _formatPrice(dynamic amount) {
+    if (amount == null) return 'N/A';
+    if (amount is num) {
+      return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(amount);
+    }
+    if (amount is String) {
+      final parsed = num.tryParse(amount.replaceAll(RegExp(r'[^0-9.]'), ''));
+      if (parsed != null) {
+        return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(parsed);
+      }
+    }
+    return amount.toString();
+  }
 
-  final List<Map<String, dynamic>> _activeBids = [
-    {
-      'vehicle': '1998 Porsche 911 Carrera',
-      'img': 'https://images.unsplash.com/photo-1542282088-fe8426682b8f?auto=format&fit=crop&w=100&q=80',
-      'time': '00:14:22',
-      'timeColor': Colors.red,
-      'timeSub': 'Urgent: Final Bidding Phase',
-      'highest': '\$89,200',
-      'highestSub': 'Increment: +\$1,000',
-      'highestSubColor': Colors.grey,
-      'bidder': 'Alex T.',
-      'bidderId': '#MB-082 • Delhi',
-      'avatarColor': Colors.purple,
-      'actionText': 'Accept/Close',
-      'actionColor': const Color(0xFFfb7800),
-    },
-    {
-      'vehicle': '2023 Tesla Model Y',
-      'img': 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=100&q=80',
-      'time': '01:45:08',
-      'timeColor': Colors.blue,
-      'timeSub': '24 bids placed',
-      'highest': '\$48,500',
-      'highestSub': 'Reserve Met',
-      'highestSubColor': Colors.green,
-      'bidder': 'Rahul V.',
-      'bidderId': '#MB-104 • Mumbai',
-      'avatarColor': Colors.blue,
-      'actionText': 'Monitor Live',
-      'actionColor': const Color(0xFF001128),
-    },
-    {
-      'vehicle': '2022 Audi Q5 Prestige',
-      'img': 'https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?auto=format&fit=crop&w=100&q=80',
-      'time': '02:15:30',
-      'timeColor': Colors.blue,
-      'timeSub': '12 bids placed',
-      'highest': '\$50,000',
-      'highestSub': 'Starting: \$42,000',
-      'highestSubColor': Colors.grey,
-      'bidder': 'Sarah V8',
-      'bidderId': '#MB-219 • Pune',
-      'avatarColor': Colors.orange,
-      'actionText': 'Monitor Live',
-      'actionColor': const Color(0xFF001128),
-    },
-  ];
+  List<Map<String, dynamic>> get _totalBids {
+    final listings = LocalListingsStore().acceptedListings;
+    final allBids = LocalListingsStore().acceptedBids;
+    final Map<String, List<Map<String, dynamic>>> bidsByVehicle = {};
+    for (var bid in allBids) {
+      final vId = bid['vehicleId'] ?? '';
+      bidsByVehicle.putIfAbsent(vId, () => []).add(bid);
+    }
+    
+    List<Map<String, dynamic>> result = [];
+    for (var v in listings) {
+      final vId = v['id'];
+      if (!bidsByVehicle.containsKey(vId)) continue;
+      final vehicleBids = bidsByVehicle[vId]!;
+      final topBid = vehicleBids.first;
+      int maxBid = 0;
+      for (var b in vehicleBids) {
+        int amt = b['bidAmountNum'] ?? b['bidAmount'] ?? 0;
+        if (amt > maxBid) maxBid = amt;
+      }
+      
+      result.add({
+        'vehicle': v['title'] ?? 'Vehicle',
+        'lot': '#LOT-${vId.hashCode.toString().substring(0, 4)}',
+        'img': v['image'] ?? 'https://via.placeholder.com/150',
+        'bids': '${vehicleBids.length} bids',
+        'trend': 'Active',
+        'trendColor': Colors.green,
+        'highest': _formatPrice(maxBid > 0 ? maxBid : (topBid['bidAmountNum'] ?? topBid['bidAmount'] ?? '₹0')),
+        'secondary': '',
+        'status': v['status'] == 'live' ? 'Live Lot' : 'Ended',
+        'statusColor': v['status'] == 'live' ? Colors.green : Colors.grey,
+        'topMember': topBid['bidderName'] ?? 'Unknown',
+        'memberId': topBid['bidderUsername'] ?? '',
+        'avatarColor': Colors.blue,
+      });
+    }
+    return result;
+  }
 
-  final List<Map<String, dynamic>> _members = [
-    {
-      'name': 'Alex Turbo',
-      'badge': 'Tier 1 Dealer',
-      'badgeColor': Colors.grey,
-      'id': '#MB-082 • alex.t@speedcars.in',
-      'bidsPlaced': '342',
-      'bidsSub': 'across 45 lots',
-      'won': '24 Won',
-      'wonValue': '₹6.5 Cr Value',
-      'deposit': 'Verified ₹50 Lakhs',
-      'depositSub': 'VIP Guarantee',
-      'avatarColor': Colors.purple,
-    },
-    {
-      'name': 'Sarah V8',
-      'badge': 'VIP Collector',
-      'badgeColor': Colors.purple,
-      'id': '#MB-219 • sarah@v8collect.com',
-      'bidsPlaced': '142',
-      'bidsSub': 'across 19 lots',
-      'won': '8 Won',
-      'wonValue': '₹2.1 Cr Value',
-      'deposit': 'Verified ₹15 Lakhs',
-      'depositSub': 'Escrow Active',
-      'avatarColor': Colors.orange,
-    },
-    {
-      'name': 'Rahul Verma',
-      'badge': 'Verified Buyer',
-      'badgeColor': Colors.blue,
-      'id': '#MB-104 • rahul.v@mail.com',
-      'bidsPlaced': '56',
-      'bidsSub': 'across 12 lots',
-      'won': '3 Won',
-      'wonValue': '₹85 L Value',
-      'deposit': 'Verified ₹5 Lakhs',
-      'depositSub': 'Standard Deposit',
-      'avatarColor': Colors.blue,
-    },
-  ];
+  List<Map<String, dynamic>> get _activeBids {
+    final listings = LocalListingsStore().acceptedListings;
+    final allBids = LocalListingsStore().acceptedBids;
+    final Map<String, List<Map<String, dynamic>>> bidsByVehicle = {};
+    for (var bid in allBids) {
+      final vId = bid['vehicleId'] ?? '';
+      bidsByVehicle.putIfAbsent(vId, () => []).add(bid);
+    }
+    
+    List<Map<String, dynamic>> result = [];
+    for (var v in listings) {
+      if (v['status'] != 'live') continue;
+      final vId = v['id'];
+      if (!bidsByVehicle.containsKey(vId)) continue;
+      
+      final vehicleBids = bidsByVehicle[vId]!;
+      final topBid = vehicleBids.first;
+      int maxBid = 0;
+      for (var b in vehicleBids) {
+        int amt = b['bidAmountNum'] ?? b['bidAmount'] ?? 0;
+        if (amt > maxBid) maxBid = amt;
+      }
+      
+      String timeStr = 'Live';
+      if (v['endTime'] != null) {
+        final end = DateTime.parse(v['endTime']);
+        final diff = end.difference(DateTime.now());
+        if (diff.isNegative) {
+          timeStr = 'Ending';
+        } else {
+          timeStr = '${diff.inHours.toString().padLeft(2, '0')}:${(diff.inMinutes % 60).toString().padLeft(2, '0')}:${(diff.inSeconds % 60).toString().padLeft(2, '0')}';
+        }
+      }
+
+      result.add({
+        'vehicle': v['title'] ?? 'Vehicle',
+        'img': v['image'] ?? 'https://via.placeholder.com/150',
+        'time': timeStr,
+        'timeColor': Colors.blue,
+        'timeSub': '${vehicleBids.length} bids placed',
+        'highest': _formatPrice(maxBid > 0 ? maxBid : (topBid['bidAmountNum'] ?? topBid['bidAmount'] ?? '₹0')),
+        'highestSub': 'Leading Bid',
+        'highestSubColor': Colors.green,
+        'bidder': topBid['bidderName'] ?? 'Unknown',
+        'bidderId': topBid['bidderUsername'] ?? '',
+        'avatarColor': Colors.orange,
+        'actionText': 'Monitor Live',
+        'actionColor': const Color(0xFF001128),
+      });
+    }
+    return result;
+  }
+
+  List<Map<String, dynamic>> get _members {
+    final allBids = LocalListingsStore().acceptedBids;
+    final Map<String, List<Map<String, dynamic>>> bidsByMember = {};
+    for (var bid in allBids) {
+      final mId = bid['bidderUsername'] ?? 'unknown';
+      bidsByMember.putIfAbsent(mId, () => []).add(bid);
+    }
+    
+    List<Map<String, dynamic>> result = [];
+    bidsByMember.forEach((mId, bids) {
+      final name = bids.first['bidderName'] ?? 'Unknown';
+      result.add({
+        'name': name,
+        'badge': 'Verified Buyer',
+        'badgeColor': Colors.blue,
+        'id': mId,
+        'bidsPlaced': bids.length.toString(),
+        'bidsSub': 'Total Bids',
+        'won': '0 Won',
+        'wonValue': '₹0 Value',
+        'deposit': 'Verified Deposit',
+        'depositSub': 'Standard',
+        'avatarColor': Colors.purple,
+      });
+    });
+    return result;
+  }
 
   void _showDummyAction(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -192,23 +175,27 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
       backgroundColor: const Color(0xFFF3F4F6),
       drawer: const AdminNavigationDrawer(),
       appBar: const AdminAppBar(),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              children: [
-                _buildHeaderTitle(),
-                _buildStatCards(isWide),
-                _buildTabsRow(),
-                _buildSearchAndSort(),
-                _buildSectionLabel(),
-                _buildGridArea(isWide),
-                _buildPagination(),
-              ],
-            ),
-          ),
-          _buildAlertBar(),
-        ],
+      body: ListenableBuilder(
+        listenable: LocalListingsStore(),
+        builder: (context, _) {
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  children: [
+                    _buildHeaderTitle(),
+                    _buildStatCards(isWide),
+                    _buildTabsRow(),
+                    _buildSearchAndSort(),
+                    _buildSectionLabel(),
+                    _buildGridArea(isWide),
+                  ],
+                ),
+              ),
+              _buildAlertBar(),
+            ],
+          );
+        },
       ),
     );
   }
@@ -228,10 +215,14 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
   }
 
   Widget _buildStatCards(bool isWide) {
+    int totalBids = LocalListingsStore().acceptedBids.length;
+    int activeBids = _activeBids.fold<int>(0, (sum, bidRow) => sum + int.parse(bidRow['timeSub'].toString().split(' ')[0]));
+    int totalMembers = _members.length;
+
     List<Widget> cards = [
-      _buildStatCard('TOTAL BIDS', '1,842', _navy, Icons.diamond_outlined),
-      _buildStatCard('ACTIVE BIDS', '142', _orange, Icons.gavel, subtitle: '14 mins avg left', subtitleIcon: Icons.access_time),
-      _buildStatCard('MEMBERS', '890', _navy, Icons.people_outline),
+      _buildStatCard('TOTAL BIDS', '$totalBids', _navy, Icons.diamond_outlined),
+      _buildStatCard('ACTIVE BIDS', '$activeBids', _orange, Icons.gavel, subtitle: 'Total bids on live lots', subtitleIcon: Icons.local_fire_department),
+      _buildStatCard('MEMBERS', '$totalMembers', _navy, Icons.people_outline),
     ];
 
     return Padding(
@@ -310,9 +301,9 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
           children: [
             _buildTab('Total Bids', 0),
             const SizedBox(width: 8),
-            _buildTab('Active Bids (142)', 1),
+            _buildTab('Active Bids', 1),
             const SizedBox(width: 8),
-            _buildTab('Members (890)', 2),
+            _buildTab('Members', 2),
           ],
         ),
       ),
@@ -413,8 +404,6 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Text('Scroll horizontally →', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
         ],
       ),
     );
@@ -455,7 +444,7 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
           DataColumn(label: Text('TOP MEMBER', style: TextStyle(fontWeight: FontWeight.bold))),
           DataColumn(label: Text('ACTION', style: TextStyle(fontWeight: FontWeight.bold))),
         ],
-        rows: _totalBids.map((row) {
+        rows: _totalBids.isEmpty ? [const DataRow(cells: [DataCell(Text('No bids yet')), DataCell(Text('')), DataCell(Text('')), DataCell(Text('')), DataCell(Text(''))])] : _totalBids.map((row) {
           return DataRow(
             cells: [
               DataCell(_buildVehicleCell(row['vehicle'], row['lot'], row['img'])),
@@ -484,7 +473,7 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
           DataColumn(label: Text('LEADING BIDDER', style: TextStyle(fontWeight: FontWeight.bold))),
           DataColumn(label: Text('INSTANT ACTION', style: TextStyle(fontWeight: FontWeight.bold))),
         ],
-        rows: _activeBids.map((row) {
+        rows: _activeBids.isEmpty ? [const DataRow(cells: [DataCell(Text('No active bids')), DataCell(Text('')), DataCell(Text('')), DataCell(Text('')), DataCell(Text(''))])] : _activeBids.map((row) {
           return DataRow(
             cells: [
               DataCell(_buildVehicleCell(row['vehicle'], '', row['img'])),
@@ -513,7 +502,7 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
           DataColumn(label: Text('DEPOSIT STATUS', style: TextStyle(fontWeight: FontWeight.bold))),
           DataColumn(label: Text('ACTION', style: TextStyle(fontWeight: FontWeight.bold))),
         ],
-        rows: _members.map((row) {
+        rows: _members.isEmpty ? [const DataRow(cells: [DataCell(Text('No members yet')), DataCell(Text('')), DataCell(Text('')), DataCell(Text('')), DataCell(Text(''))])] : _members.map((row) {
           return DataRow(
             cells: [
               DataCell(_buildMemberFullCell(row['name'], row['badge'], row['badgeColor'], row['id'], row['avatarColor'])),
@@ -534,7 +523,20 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.network(img, width: 60, height: 40, fit: BoxFit.cover),
+          child: Image.network(
+            img, 
+            width: 60, 
+            height: 40, 
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                width: 60,
+                height: 40,
+                color: Colors.grey.shade300,
+                child: const Icon(Icons.directions_car, color: Colors.grey, size: 24),
+              );
+            },
+          ),
         ),
         const SizedBox(width: 12),
         Column(
@@ -590,7 +592,7 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
           const SizedBox(height: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
             child: Text(status, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
           ),
         ]
@@ -652,7 +654,7 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: badgeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                  decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                   child: Text(badge, style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
               ],
@@ -672,7 +674,7 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(color: _green.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: _green.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
           child: Text(won, style: TextStyle(color: _green, fontWeight: FontWeight.bold, fontSize: 12)),
         ),
         const SizedBox(height: 4),
@@ -727,9 +729,10 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _totalBids.length,
+      itemCount: _totalBids.isEmpty ? 1 : _totalBids.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, i) {
+        if (_totalBids.isEmpty) return const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No bids yet', style: TextStyle(color: Colors.grey, fontSize: 16))));
         final row = _totalBids[i];
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -763,9 +766,10 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _activeBids.length,
+      itemCount: _activeBids.isEmpty ? 1 : _activeBids.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, i) {
+        if (_activeBids.isEmpty) return const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No active bids', style: TextStyle(color: Colors.grey, fontSize: 16))));
         final row = _activeBids[i];
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -799,9 +803,10 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _members.length,
+      itemCount: _members.isEmpty ? 1 : _members.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, i) {
+        if (_members.isEmpty) return const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No members yet', style: TextStyle(color: Colors.grey, fontSize: 16))));
         final row = _members[i];
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -831,34 +836,7 @@ class _AdminBiddingScreenState extends State<AdminBiddingScreen> {
     );
   }
 
-  Widget _buildPagination() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Showing 1-4 of 142 Active Bids',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-          ),
-          Row(
-            children: [
-              Icon(Icons.chevron_left, color: Colors.grey.shade400),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: _navy, borderRadius: BorderRadius.circular(4)),
-                child: const Text('1', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 8),
-              Icon(Icons.chevron_right, color: _navy),
-            ],
-          )
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildAlertBar() {
     return Container(

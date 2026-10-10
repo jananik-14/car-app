@@ -21,9 +21,9 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       iconTheme: const IconThemeData(color: navyColor),
       titleSpacing: 16,
-      title: Column(
+      title: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           Text(
             'Wheels2Drive',
             style: TextStyle(

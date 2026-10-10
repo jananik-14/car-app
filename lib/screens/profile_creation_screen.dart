@@ -9,7 +9,7 @@ import '../services/admin_notification_store.dart';
 import '../widgets/profile_form_fields.dart';
 import '../widgets/kyc_upload_field.dart';
 import '../services/auth_service.dart';
-
+import '../utils/blob_storage.dart';
 class ProfileCreationScreen extends StatefulWidget {
   const ProfileCreationScreen({super.key});
 
@@ -25,7 +25,7 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
   
   XFile? _profileImage;
   Uint8List? _profileImageBytes;
-  XFile? _kycDocumentImage;
+  String? _kycFileName;
   Uint8List? _kycDocumentBytes;
   bool _isFormValid = false;
   String? _errorMessage;
@@ -52,7 +52,7 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
     } else if (_cityController.text.trim().isEmpty) {
       isValid = false;
       error = 'City / Location is required.';
-    } else if (_kycDocumentImage == null) {
+    } else if (_kycDocumentBytes == null) {
       isValid = false;
       error = 'KYC document is required.';
     }
@@ -78,11 +78,16 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
     await ProfileStorageHelper.saveProfileField(phone, 'user_email', _emailController.text.trim());
     await ProfileStorageHelper.saveProfileField(phone, 'user_city', _cityController.text.trim());
     await ProfileStorageHelper.saveProfileField(phone, 'user_dob', _dobController.text.trim());
-    await ProfileStorageHelper.setProfileComplete(phone);
+    // Profile completion is now evaluated dynamically based on fields and KYC
     
-    if (_kycDocumentImage != null) {
+    if (_kycDocumentBytes != null) {
       final prefs = await SharedPreferences.getInstance();
+      final blob = BlobStorage();
+      await blob.put('$phone/kyc', _kycDocumentBytes!);
       await prefs.setBool('kyc_uploaded_$phone', true);
+      if (_kycFileName != null) {
+        await prefs.setString('kyc_file_name_$phone', _kycFileName!);
+      }
     }
     
     if (mounted) {
@@ -159,8 +164,8 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
               
               const SizedBox(height: 24),
               KycUploadField(
-                onChanged: (file, bytes) {
-                  _kycDocumentImage = file;
+                onChanged: (fileName, bytes) {
+                  _kycFileName = fileName;
                   _kycDocumentBytes = bytes;
                   _validateForm();
                 },

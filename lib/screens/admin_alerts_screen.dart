@@ -7,14 +7,14 @@ class AdminAlertsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ResponsiveNavScaffold(
+    return const ResponsiveNavScaffold(
       isAdmin: true,
       currentIndex: 4,
-      appBar: const AdminAppBar(),
+      appBar: AdminAppBar(),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
+          children: [
             Icon(Icons.notifications_none, size: 60, color: Colors.grey),
             SizedBox(height: 16),
             Text('Admin Alerts', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF001128))),

@@ -9,8 +9,8 @@ class ConfirmationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color navy = const Color(0xFF001128);
-    final Color orange = const Color(0xFFFB7800);
+    const Color navy = Color(0xFF001128);
+    const Color orange = Color(0xFFFB7800);
     final String refNumber = 'W24-${Random().nextInt(9000) + 1000}';
 
     return Scaffold(
@@ -25,16 +25,16 @@ class ConfirmationScreen extends StatelessWidget {
             if (context.canPop()) {
               context.pop();
             } else {
-              context.go('/');
+              context.go('/browse');
             }
           },
         ),
-        title: Row(
+        title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.directions_car, color: Colors.black, size: 20),
-            const SizedBox(width: 8),
-            const Text(
+            Icon(Icons.directions_car, color: Colors.black, size: 20),
+            SizedBox(width: 8),
+            Text(
               'Bid Confirmati...',
               style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
             ),
@@ -57,13 +57,13 @@ class ConfirmationScreen extends StatelessWidget {
                   height: 120,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: orange.withOpacity(0.15),
+                    color: orange.withValues(alpha: 0.15),
                   ),
                   child: Center(
                     child: Container(
                       width: 80,
                       height: 80,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         color: orange,
                       ),
@@ -87,11 +87,11 @@ class ConfirmationScreen extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.circle, color: orange, size: 8),
+                      const Icon(Icons.circle, color: orange, size: 8),
                       const SizedBox(width: 8),
                       Text(
                         'Ref: #$refNumber',
-                        style: TextStyle(color: navy, fontWeight: FontWeight.bold, fontSize: 14),
+                        style: const TextStyle(color: navy, fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                     ],
                   ),
@@ -101,7 +101,7 @@ class ConfirmationScreen extends StatelessWidget {
                 // Heading
                 Text(
                   type == 'bid' ? 'Bid Placed Successfully!' : 'Sent for Approval!',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: navy,
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -137,9 +137,9 @@ class ConfirmationScreen extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         Text('Go to Dashboard', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                         SizedBox(width: 8),
                         Icon(Icons.arrow_forward, color: Colors.white),

@@ -35,7 +35,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
               onPressed: () => context.pop(),
             ),
           ),
-          Column(
+          const Column(
             children: [
               Text(
                 'STEP 3 OF 3',
@@ -46,8 +46,8 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                   letterSpacing: 1.0,
                 ),
               ),
-              const SizedBox(height: 2),
-              const Text(
+              SizedBox(height: 2),
+              Text(
                 'Terms of Use',
                 style: TextStyle(
                   fontSize: 18,
@@ -90,11 +90,11 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                   child: const Icon(Icons.gavel, color: AppColors.primary),
                 ),
                 const SizedBox(width: 16),
-                Expanded(
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         '100% Fair Bidding Protocol',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
@@ -102,7 +102,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                           fontSize: 15,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       Text(
                         'Regulated auto auction exchange guidelines',
                         style: TextStyle(
@@ -125,11 +125,11 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
               color: AppColors.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: AppColors.outlineVariant.withOpacity(0.5),
+                color: AppColors.outlineVariant.withValues(alpha: 0.5),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
+                  color: Colors.black.withValues(alpha: 0.02),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 )
@@ -138,10 +138,10 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
             child: Column(
               children: [
                 // Header Row
-                Row(
+                const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'SUMMARY GUIDELINES',
                       style: TextStyle(
                         fontSize: 11,
@@ -153,7 +153,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                     Row(
                       children: [
                         Icon(Icons.access_time, size: 12, color: AppColors.outline),
-                        const SizedBox(width: 4),
+                        SizedBox(width: 4),
                         Text(
                           'Updated Today',
                           style: TextStyle(
@@ -183,11 +183,11 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                       child: const Icon(Icons.business_center, size: 20, color: AppColors.primary),
                     ),
                     const SizedBox(width: 16),
-                    Expanded(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Pan-India Verified Ecosystem',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
@@ -195,7 +195,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                               fontSize: 15,
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          SizedBox(height: 6),
                           Text(
                             'Only KYC-verified clients can access live auctions. Accounts are non-transferable and subject to quarterly audits.',
                             style: TextStyle(
@@ -224,11 +224,11 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                       child: const Icon(Icons.account_balance_wallet, size: 20, color: AppColors.primary),
                     ),
                     const SizedBox(width: 16),
-                    Expanded(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Security Deposit & Refundable Tokens',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
@@ -236,7 +236,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                               fontSize: 15,
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          SizedBox(height: 6),
                           Text(
                             'Earnest Money Deposit (EMD) is required before bidding. Fully refundable if no vehicle is won, otherwise adjusted against RTO settlement.',
                             style: TextStyle(
@@ -303,11 +303,11 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                 color: AppColors.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _isAccepted ? AppColors.primary : AppColors.outlineVariant.withOpacity(0.5),
+                  color: _isAccepted ? AppColors.primary : AppColors.outlineVariant.withValues(alpha: 0.5),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
+                    color: Colors.black.withValues(alpha: 0.02),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   )
@@ -333,11 +333,11 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                         : null,
                   ),
                   const SizedBox(width: 16),
-                  Expanded(
+                  const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'I accept all platform auction terms & guidelines',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -345,7 +345,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                             fontSize: 14,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4),
                         Text(
                           'Mandatory acknowledgment before entering the live auction arena.',
                           style: TextStyle(
@@ -379,9 +379,9 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                 : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: _isAccepted ? AppColors.primary : lightBlueGrey,
-              foregroundColor: _isAccepted ? Colors.white : AppColors.primary.withOpacity(0.5),
+              foregroundColor: _isAccepted ? Colors.white : AppColors.primary.withValues(alpha: 0.5),
               disabledBackgroundColor: lightBlueGrey,
-              disabledForegroundColor: AppColors.primary.withOpacity(0.5),
+              disabledForegroundColor: AppColors.primary.withValues(alpha: 0.5),
               minimumSize: const Size(double.infinity, 56),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -408,7 +408,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Text(
+          const Text(
             'By continuing, you agree to our Digital Auction Code of Conduct.',
             style: TextStyle(
               color: AppColors.outline,

@@ -207,16 +207,16 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: orange.withOpacity(0.1),
+                color: orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  const Icon(Icons.refresh, color: orange, size: 14),
-                  const SizedBox(width: 4),
+                  Icon(Icons.refresh, color: orange, size: 14),
+                  SizedBox(width: 4),
                   Text(
                     'Clear All (3)',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: orange,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
@@ -293,8 +293,8 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
         'icon': Icons.timer_outlined,
         'badge': 'URGENT',
       },
-      {'title': 'Lowest Current Bid', 'icon': Icons.arrow_downward},
-      {'title': 'Highest Current Bid', 'icon': Icons.arrow_upward},
+      {'title': 'Lowest Current Highest Bid', 'icon': Icons.arrow_downward},
+      {'title': 'Highest Current Highest Bid', 'icon': Icons.arrow_upward},
       {'title': 'Year: Newest to Oldest', 'icon': Icons.calendar_today},
       {'title': 'Kilometers: Low to High', 'icon': Icons.speed},
     ];
@@ -310,7 +310,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: orange.withOpacity(0.1),
+                color: orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
@@ -380,7 +380,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
                 ),
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -806,7 +806,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             offset: const Offset(0, -4),
             blurRadius: 8,
           ),
@@ -874,7 +874,7 @@ class _FilterSortScreenState extends State<FilterSortScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(

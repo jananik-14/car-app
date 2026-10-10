@@ -54,10 +54,10 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
   Widget _buildSectionHeader() {
     final store = AdminClientsStore();
     String badgeText = '';
-    if (_activeTabIndex == 0) badgeText = '${store.clients.length} Total';
-    else if (_activeTabIndex == 1) badgeText = '${store.activeLogins.length} Active';
+    if (_activeTabIndex == 0) {
+      badgeText = '${store.clients.length} Total';
+    } else if (_activeTabIndex == 1) badgeText = '${store.activeLogins.length} Active';
     else if (_activeTabIndex == 2) badgeText = '${store.history.length} Logs';
-    else if (_activeTabIndex == 3) badgeText = '${store.clients.where((c) => c['status'] == 'Verified').length} Complete';
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -103,8 +103,6 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
           _buildTabButton('2. Active Logins', 1),
           const SizedBox(width: 8),
           _buildTabButton('3. Client History', 2),
-          const SizedBox(width: 8),
-          _buildTabButton('4. Profile-Completed', 3),
         ],
       ),
     );
@@ -176,11 +174,6 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
     } else if (_activeTabIndex == 2) {
       title = 'Client Activity History';
       badgeText = 'Logs';
-    } else if (_activeTabIndex == 3) {
-      title = 'Profile-Completed Directory';
-      badgeText = '${store.clients.where((c) => c['status'] == 'Verified').length} Complete';
-      badgeColor = const Color(0xFFfb7800);
-      badgeTextColor = Colors.white;
     }
 
     return Row(
@@ -219,10 +212,10 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
 
   Widget _buildSearchBar() {
     String hint = '';
-    if (_activeTabIndex == 0) hint = 'Search total clients...';
-    else if (_activeTabIndex == 1) hint = 'Search active sessions...';
+    if (_activeTabIndex == 0) {
+      hint = 'Search total clients...';
+    } else if (_activeTabIndex == 1) hint = 'Search active sessions...';
     else if (_activeTabIndex == 2) hint = 'Search audit logs...';
-    else if (_activeTabIndex == 3) hint = 'Search registered profiles...';
 
     return TextField(
       onChanged: (value) {
@@ -247,9 +240,8 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
 
   Widget _buildListContent() {
     final store = AdminClientsStore();
-    if (_activeTabIndex == 0 || _activeTabIndex == 3) {
+    if (_activeTabIndex == 0) {
       var filtered = store.clients.where((c) {
-        if (_activeTabIndex == 3 && c['status'] != 'Verified') return false; // simulated profile complete filter
         return c['name'].toLowerCase().contains(_searchQuery) || c['email'].toLowerCase().contains(_searchQuery);
       }).toList();
 

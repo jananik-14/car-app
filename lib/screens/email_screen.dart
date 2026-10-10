@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
-import 'subscription_plans_screen.dart'; // For global state
+// For global state
 import '../widgets/responsive_layout_wrapper.dart';
 
 class EmailScreen extends StatefulWidget {
@@ -164,9 +164,9 @@ class _EmailScreenState extends State<EmailScreen> {
               color: const Color(0xFFEEF1F7), // Light-blue pill badge
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Row(
+            child: const Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
+              children: [
                 Icon(Icons.shield, color: AppColors.primary, size: 12),
                 SizedBox(width: 4),
                 Text(
@@ -275,9 +275,9 @@ class _EmailScreenState extends State<EmailScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
             ),
-            child: Row(
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
+              children: [
                 Text(
                   'Save Email',
                   style: TextStyle(
@@ -307,11 +307,11 @@ class _EmailScreenState extends State<EmailScreen> {
   }
 
   Widget _buildFooter() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(24, 16, 24, 32),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
+        children: [
           Icon(Icons.lock_outline, color: AppColors.outline, size: 14),
           SizedBox(width: 6),
           Text(

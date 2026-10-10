@@ -1,14 +1,12 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
-import '../widgets/custom_network_image.dart';
-import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../utils/responsive_helper.dart';
-import 'package:provider/provider.dart';
-import '../utils/watchlist_store.dart';
+
+import '../utils/local_listings_store.dart';
 import 'filter_sort_screen.dart';
+import '../widgets/live_auction_vehicle_card.dart';
 
 class BrowseVehiclesScreen extends StatefulWidget {
   const BrowseVehiclesScreen({super.key});
@@ -18,54 +16,31 @@ class BrowseVehiclesScreen extends StatefulWidget {
 }
 
 class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
-  int _bottomNavIndex = 0;
+  final int _bottomNavIndex = 0;
   Timer? _refreshTimer;
   bool _isRefreshing = false;
   String searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   
-  // Dummy data for vehicles
-  final List<Map<String, dynamic>> _vehicles = [
-    {
-      'id': '1',
-      'title': '2022 Audi Q5 Technology',
-      'specs': '2022 • Petrol • 18,450 km • DL-1C',
-      'bid': '₹38.5 Lakhs',
-      'bids_placed': '14',
-      'time_left': '2h 14m',
-      'city': 'Delhi',
-      'image': 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=400&q=80',
-    },
-    {
-      'id': '2',
-      'title': '2021 BMW 3 Series 330i',
-      'specs': '2021 • Petrol • 24,000 km • HR-26',
-      'bid': '₹34.2 Lakhs',
-      'bids_placed': '8',
-      'time_left': '4h 30m',
-      'city': 'Gurugram',
-      'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=400&q=80',
-    },
-    {
-      'id': '3',
-      'title': '2023 Mercedes-Benz GLC',
-      'specs': '2023 • Diesel • 12,100 km • MH-02',
-      'bid': '₹45.0 Lakhs',
-      'bids_placed': '22',
-      'time_left': '1h 45m',
-      'city': 'Mumbai',
-      'image': 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=400&q=80',
-    },
-  ];
-
   List<Map<String, dynamic>> get filteredVehicles {
-    if (searchQuery.isEmpty) return _vehicles;
-    final query = searchQuery.toLowerCase();
-    return _vehicles.where((v) {
-      final title = (v['title']?.toString() ?? '').toLowerCase();
-      final specs = (v['specs']?.toString() ?? '').toLowerCase();
-      return title.contains(query) || specs.contains(query);
+    final store = LocalListingsStore();
+    final now = DateTime.now();
+    var liveListings = store.acceptedListings.where((v) {
+      if (v['status'] != 'live') return false;
+      if (v['endTime'] == null) return false;
+      final endTime = DateTime.parse(v['endTime']);
+      if (endTime.isBefore(now)) return false;
+      return true;
     }).toList();
+
+    if (searchQuery.isNotEmpty) {
+      final query = searchQuery.toLowerCase();
+      liveListings = liveListings.where((v) {
+        final title = (v['title']?.toString() ?? '').toLowerCase();
+        return title.contains(query);
+      }).toList();
+    }
+    return liveListings;
   }
 
   @override
@@ -89,14 +64,11 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
       _isRefreshing = true;
     });
     
-    // Simulate network delay
     await Future.delayed(const Duration(milliseconds: 800));
     
     if (mounted) {
       setState(() {
         _isRefreshing = false;
-        // Shuffle the list to simulate new data
-        _vehicles.shuffle(Random());
       });
     }
   }
@@ -112,8 +84,9 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
           builder: (innerContext) => _buildSearchBar(innerContext, lightBlueGrey),
         ),
         _buildSectionHeader(lightBlueGrey),
-        Builder(
-          builder: (context) {
+        ListenableBuilder(
+          listenable: LocalListingsStore(),
+          builder: (context, _) {
             final currentVehicles = filteredVehicles;
             if (currentVehicles.isEmpty && searchQuery.isNotEmpty) {
               return Padding(
@@ -149,20 +122,28 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                     physics: const NeverScrollableScrollPhysics(),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     itemCount: currentVehicles.length,
-                    itemBuilder: (context, index) => _buildVehicleCard(currentVehicles[index], lightBlueGrey),
+                    itemBuilder: (context, index) => LiveAuctionVehicleCard(vehicle: currentVehicles[index], lightBlueGrey: lightBlueGrey),
                   )
-                : GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
+                : Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: ResponsiveHelper.gridColumns(context),
-                      childAspectRatio: 0.60,
-                      crossAxisSpacing: 24,
-                      mainAxisSpacing: 24,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        int crossAxisCount = ResponsiveHelper.gridColumns(context);
+                        double crossAxisSpacing = 24;
+                        double itemWidth = (constraints.maxWidth - (crossAxisCount - 1) * crossAxisSpacing) / crossAxisCount;
+                        
+                        return Wrap(
+                          spacing: crossAxisSpacing,
+                          runSpacing: 24,
+                          children: currentVehicles.map((vehicle) {
+                            return SizedBox(
+                              width: itemWidth,
+                              child: LiveAuctionVehicleCard(vehicle: vehicle, lightBlueGrey: lightBlueGrey),
+                            );
+                          }).toList(),
+                        );
+                      },
                     ),
-                    itemCount: currentVehicles.length,
-                    itemBuilder: (context, index) => _buildVehicleCard(currentVehicles[index], lightBlueGrey),
                   );
           },
         ),
@@ -200,10 +181,10 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Column(
+          const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
+            children: [
               Text(
                 'Wheels2Drive',
                 style: TextStyle(
@@ -328,9 +309,9 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                   color: lightBlueGrey,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(Icons.location_on, size: 12, color: AppColors.primary),
                     SizedBox(width: 4),
                     Text(
@@ -359,8 +340,8 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
                 ),
               GestureDetector(
                 onTap: _handleRefresh,
-                child: Row(
-                  children: const [
+                child: const Row(
+                  children: [
                     Text(
                       'Auto-refresh',
                       style: TextStyle(
@@ -380,294 +361,5 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
       ),
     );
   }
-
-  Widget _buildVehicleCard(Map<String, dynamic> vehicle, Color lightBlueGrey) {
-    return GestureDetector(
-      onTap: () => context.push('/vehicle_detail/${vehicle['id']}'),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 24),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.3)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Image Area
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  child: CustomNetworkImage(imageUrl: vehicle['image'],
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      height: 180,
-                      width: double.infinity,
-                      color: Colors.grey.shade300,
-                      child: const Icon(Icons.car_crash, color: Colors.grey),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.circle, color: Colors.white, size: 8),
-                        SizedBox(width: 4),
-                        Text(
-                          'LIVE AUCTION',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      '140-Pt Inspected',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 12,
-                  right: 12,
-                  child: ListenableBuilder(
-                    listenable: WatchlistStore(),
-                    builder: (context, child) {
-                      bool isSaved = WatchlistStore().isSaved(vehicle);
-                      return GestureDetector(
-                        onTap: () {
-                          WatchlistStore().toggleSave(vehicle);
-                        },
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isSaved ? Icons.favorite : Icons.favorite_border,
-                            color: isSaved ? Colors.red : AppColors.primary,
-                            size: 18,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-            // Details Area
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    vehicle['specs'],
-                    style: const TextStyle(
-                      color: AppColors.outline,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    vehicle['title'],
-                    style: const TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(
-                        vehicle['city'] ?? 'Unknown Location',
-                        style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: lightBlueGrey,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Current Bid',
-                              style: TextStyle(
-                                color: AppColors.onSurfaceVariant,
-                                fontSize: 11,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              vehicle['bid'],
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '${vehicle['bids_placed']} bids placed',
-                              style: const TextStyle(
-                                color: AppColors.onSurfaceVariant,
-                                fontSize: 11,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.access_time, size: 12, color: AppColors.secondaryContainer),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Ends in ${vehicle['time_left']}',
-                                  style: const TextStyle(
-                                    color: AppColors.secondaryContainer,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 1,
-                        child: OutlinedButton(
-                          onPressed: () => context.push('/inspection/${vehicle['id']}'),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.primary, width: 1.5),
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(Icons.description_outlined, color: AppColors.primary, size: 14),
-                              SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  'Inspection',
-                                  style: TextStyle(
-                                    color: AppColors.primary,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 3,
-                        child: ElevatedButton(
-                          onPressed: () => context.push('/vehicle_detail/${vehicle['id']}'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.secondaryContainer,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Text(
-                                'Bid Now',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Icon(Icons.arrow_forward, size: 18),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
 
 }

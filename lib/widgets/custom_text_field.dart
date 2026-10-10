@@ -42,11 +42,11 @@ class CustomTextField extends StatelessWidget {
             color: AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: AppColors.outlineVariant.withOpacity(0.6),
+              color: AppColors.outlineVariant.withValues(alpha: 0.6),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.02),
+                color: Colors.black.withValues(alpha: 0.02),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),

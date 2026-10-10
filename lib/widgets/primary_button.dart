@@ -28,7 +28,7 @@ class PrimaryButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           elevation: 4,
-          shadowColor: AppColors.secondaryContainer.withOpacity(0.25),
+          shadowColor: AppColors.secondaryContainer.withValues(alpha: 0.25),
         ),
         onPressed: isLoading ? null : onPressed,
         child: isLoading

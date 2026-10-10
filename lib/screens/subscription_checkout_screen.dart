@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/foundation.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
 import '../widgets/upi_payment_section.dart';
 import '../services/subscription_store.dart';
@@ -242,6 +241,7 @@ class _SubscriptionCheckoutScreenState
       'phone': phone,
     });
 
+
     AdminNotificationStore().addNotification(
         'New subscription request: ${_plan.name} ${_formatAmount(_plan.price)} by $realName, Ref $utr',
         'subscription',
@@ -357,7 +357,7 @@ class _SubscriptionCheckoutScreenState
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],

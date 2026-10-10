@@ -9,7 +9,7 @@ import '../services/admin_notification_store.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
 import '../widgets/kyc_upload_field.dart';
 import '../services/auth_service.dart';
-
+import '../utils/blob_storage.dart';
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
 
@@ -22,6 +22,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   bool _isLoading = true;
   Uint8List? _profileImageBytes;
   bool _kycUploaded = false;
+  String? _kycFileName;
+  Uint8List? _kycDocumentBytes;
+  bool _kycRemoved = false;
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
@@ -45,7 +48,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final city = await ProfileStorageHelper.getProfileField(phone, 'user_city');
     final dob = await ProfileStorageHelper.getProfileField(phone, 'user_dob');
     final prefs = await SharedPreferences.getInstance();
-    final kycUploaded = prefs.getBool('kyc_uploaded_$phone') ?? false;
+    
+    final blob = BlobStorage();
+    final kycBytes = await blob.get('$phone/kyc');
+    final kycUploaded = kycBytes != null;
+    final kycFileName = prefs.getString('kyc_file_name_$phone');
 
     setState(() {
       _nameController.text = name ?? '';
@@ -54,6 +61,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _dobController.text = dob ?? '';
       _mobileController.text = phone; // Actually display the logged in phone!
       _kycUploaded = kycUploaded;
+      _kycFileName = kycFileName;
       _isLoading = false;
     });
   }
@@ -72,6 +80,32 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final phone = AuthService().currentPhone;
     if (phone == null) return;
 
+    if (_nameController.text.trim().isEmpty || 
+        _emailController.text.trim().isEmpty || 
+        _addressController.text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Name, Email, and City are required.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!_kycUploaded && _kycDocumentBytes == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please upload a KYC document'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
     await ProfileStorageHelper.saveProfileField(
         phone, 'user_name', _nameController.text.trim());
     await ProfileStorageHelper.saveProfileField(
@@ -80,6 +114,20 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         phone, 'user_city', _addressController.text.trim());
     await ProfileStorageHelper.saveProfileField(
         phone, 'user_dob', _dobController.text.trim());
+        
+    final prefs = await SharedPreferences.getInstance();
+    final blob = BlobStorage();
+    if (_kycDocumentBytes != null) {
+      await blob.put('$phone/kyc', _kycDocumentBytes!);
+      await prefs.setBool('kyc_uploaded_$phone', true);
+      if (_kycFileName != null) {
+        await prefs.setString('kyc_file_name_$phone', _kycFileName!);
+      }
+    } else if (_kycRemoved) {
+      await blob.delete('$phone/kyc');
+      await prefs.setBool('kyc_uploaded_$phone', false);
+      await prefs.remove('kyc_file_name_$phone');
+    }
 
     if (mounted) {
       final fullName = _nameController.text.trim();
@@ -142,15 +190,32 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         ),
                         const SizedBox(height: 24),
                         KycUploadField(
-                          initialIsUploaded: _kycUploaded,
-                          onChanged: (file, bytes) {
-                            if (file != null) {
-                              SharedPreferences.getInstance().then((prefs) {
-                                prefs.setBool('kyc_uploaded_${_mobileController.text}', true);
-                              });
+                          initialFileName: _kycUploaded ? (_kycFileName ?? 'document.pdf') : null,
+                          onChanged: (fileName, bytes) {
+                            if (bytes != null) {
+                              _kycFileName = fileName;
+                              _kycDocumentBytes = bytes;
+                              _kycRemoved = false;
+                            } else {
+                              _kycFileName = null;
+                              _kycDocumentBytes = null;
+                              _kycUploaded = false;
+                              _kycRemoved = true;
                             }
+                            setState(() {});
                           },
                         ),
+                        if (!_kycUploaded && _kycDocumentBytes == null)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8.0),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Please upload a KYC document',
+                                style: TextStyle(color: Colors.red, fontSize: 12),
+                              ),
+                            ),
+                          ),
                         const SizedBox(height: 32),
                         SizedBox(
                           width: double.infinity,

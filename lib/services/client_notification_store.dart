@@ -5,14 +5,16 @@ import '../utils/profile_storage_helper.dart';
 
 class ClientNotificationItem {
   final String title;
-  final String type; // 'subscription_approved', 'subscription_rejected', 'listing_approved', 'listing_rejected', 'bid_accepted', 'bid_rejected', 'payment_confirmed', 'payment_rejected'
+  final String type;
+  final String? refId;
   final DateTime timestamp;
-  final String forPhone; // which client this notification belongs to
+  final String forPhone;
   bool isRead;
 
   ClientNotificationItem({
     required this.title,
     required this.type,
+    this.refId,
     required this.timestamp,
     required this.forPhone,
     this.isRead = false,
@@ -21,6 +23,7 @@ class ClientNotificationItem {
   Map<String, dynamic> toJson() => {
         'title': title,
         'type': type,
+        'refId': refId,
         'timestamp': timestamp.toIso8601String(),
         'forPhone': forPhone,
         'isRead': isRead,
@@ -29,7 +32,8 @@ class ClientNotificationItem {
   factory ClientNotificationItem.fromJson(Map<String, dynamic> json) =>
       ClientNotificationItem(
         title: json['title'],
-        type: json['type'],
+        type: json['type'] ?? '',
+        refId: json['refId'],
         timestamp: DateTime.parse(json['timestamp']),
         forPhone: json['forPhone'],
         isRead: json['isRead'] ?? false,
@@ -45,6 +49,12 @@ class ClientNotificationStore extends ChangeNotifier {
 
   ClientNotificationStore._internal() {
     _loadFromStorage();
+  }
+
+  void resetSession() {
+    notifications.clear();
+    _loadFromStorage();
+    notifyListeners();
   }
 
   Future<void> _loadFromStorage() async {
@@ -72,10 +82,11 @@ class ClientNotificationStore extends ChangeNotifier {
     await prefs.setString('client_notifications_store', jsonEncode(jsonList));
   }
 
-  void addNotification(String title, String type, String forPhone) {
+  void addNotification(String title, String type, String forPhone, {String? refId}) {
     notifications.insert(0, ClientNotificationItem(
       title: title,
       type: type,
+      refId: refId,
       timestamp: DateTime.now(),
       forPhone: ProfileStorageHelper.normalizePhone(forPhone),
     ));
@@ -93,6 +104,18 @@ class ClientNotificationStore extends ChangeNotifier {
     for (var n in forCurrentUser(phone)) {
       n.isRead = true;
     }
+    _saveToStorage();
+    notifyListeners();
+  }
+
+  void markAsRead(ClientNotificationItem item) {
+    item.isRead = true;
+    _saveToStorage();
+    notifyListeners();
+  }
+
+  void clearAllFor(String phone) {
+    notifications.removeWhere((n) => n.forPhone == ProfileStorageHelper.normalizePhone(phone));
     _saveToStorage();
     notifyListeners();
   }

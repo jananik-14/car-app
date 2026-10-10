@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'dart:typed_data';
 import 'package:go_router/go_router.dart';
 import '../screens/login_screen.dart';
@@ -9,6 +10,7 @@ import '../screens/watchlist_screen.dart';
 import '../screens/vehicle_detail_screen.dart';
 import '../screens/inspection_report_screen.dart';
 import '../screens/post_vehicle_form_screen.dart';
+import '../screens/listing_pdf_screen.dart';
 import '../screens/confirmation_screen.dart';
 import '../screens/admin_approval_center_screen.dart';
 import '../screens/admin_clients_details_screen.dart';
@@ -29,31 +31,56 @@ import '../screens/subscription_checkout_screen.dart';
 import '../services/auth_service.dart';
 import '../utils/temp_admin_config.dart';
 
+void openVehicleDetail(BuildContext context, String listingId) {
+  context.push('/vehicle_detail/$listingId');
+}
+
 class AppRouter {
   static final router = GoRouter(
     initialLocation: '/login',
     refreshListenable: AuthService(),
+    errorBuilder: (context, state) => Scaffold(
+      appBar: AppBar(
+        title: const Text('Page Not Found'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/browse'),
+        ),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Oops! This page doesn\'t exist.', style: TextStyle(fontSize: 18)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => context.go('/browse'),
+              child: const Text('Back to Live Auctions'),
+            ),
+          ],
+        ),
+      ),
+    ),
     redirect: (context, state) {
       final loggedIn = AuthService().isLoggedIn;
       final location = state.uri.path;
-      print('LOGOUT DEBUG: redirect location=$location loggedIn=$loggedIn');
-
       final isAuthRoute = location == '/login' || location == '/otp';
 
-      if (!loggedIn && !isAuthRoute) {
-        print('AUTH DEBUG: redirect location=$location loggedIn=$loggedIn -> /login');
-        return '/login';
+      if (!loggedIn) {
+        if (location == '/otp' && (state.extra == null || (state.extra as String).isEmpty)) {
+          return '/login';
+        }
+        if (!isAuthRoute) {
+          return '/login';
+        }
       }
 
       if (loggedIn && location == '/login') {
         final phone = AuthService().currentPhone ?? '';
-        final isAdmin = TempAdminConfig.isAdminNumber(phone);
-        final target = isAdmin ? '/admin' : '/browse';
-        print('AUTH DEBUG: redirect location=$location loggedIn=$loggedIn -> $target');
-        return target; 
+        final isAdmin = AuthService.currentUserRole == 'admin';
+        return isAdmin ? '/admin' : '/browse';
       }
 
-      print('AUTH DEBUG: redirect location=$location loggedIn=$loggedIn -> null');
       return null;
     },
     routes: [
@@ -92,16 +119,22 @@ class AppRouter {
         },
       ),
       GoRoute(
-        path: '/inspection/:id',
+        path: '/inspection-report/:id',
         builder: (context, state) {
           final id = state.pathParameters['id']!;
-          final pdfBytes = state.extra as Uint8List?;
-          return InspectionReportScreen(vehicleId: id, pdfBytes: pdfBytes);
+          return InspectionReportScreen(vehicleId: id);
         },
       ),
       GoRoute(
         path: '/post_vehicle',
         builder: (context, state) => const PostVehicleFormScreen(),
+      ),
+      GoRoute(
+        path: '/listing-pdf/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return ListingPdfScreen(listingId: id);
+        },
       ),
       GoRoute(
         path: '/confirmation/:type',
@@ -187,10 +220,12 @@ class AppRouter {
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>? ?? {};
           return PaymentScreen(
+            id: extra['id'] ?? '',
             title: extra['title'] ?? 'Vehicle',
             image: extra['image'] ?? 'assets/images/placeholder.png',
             amount: extra['amount'] ?? 0,
             seller: extra['seller'] ?? 'Unknown',
+            initialStep: extra['initialStep'] ?? 'token',
           );
         },
       ),
