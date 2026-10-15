@@ -15,6 +15,7 @@ import '../services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/profile_storage_helper.dart';
 import '../widgets/listing_image.dart';
+import '../utils/blob_storage.dart';
 import 'dart:math' as math;
 
 // TODO: Payment status is NOT confirmed by the app. Real confirmation must come from backend (gateway webhook / bank reconciliation).
@@ -58,7 +59,11 @@ class _PaymentScreenState extends State<PaymentScreen>
   @override
   void initState() {
     super.initState();
-    _currentStep = widget.initialStep;
+    if (_isTokenConfirmed || widget.initialStep == 'balance') {
+      _currentStep = 'balance';
+    } else {
+      _currentStep = widget.initialStep;
+    }
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -85,15 +90,15 @@ class _PaymentScreenState extends State<PaymentScreen>
   int get _finalTotal {
     final store = LocalListingsStore();
     final listing = store.acceptedListings.firstWhere(
-      (l) => l['id'] == widget.id,
+      (l) => l['id']?.toString() == widget.id.toString(),
       orElse: () => <String, dynamic>{},
     );
-    final currentBid = listing['currentBid'] ?? listing['price'] ?? widget.amount;
+    final finalPrice = listing['finalPrice'] ?? listing['currentBid'] ?? listing['price'] ?? widget.amount;
     int total = widget.amount;
-    if (currentBid is int) {
-      total = currentBid;
-    } else if (currentBid != null) {
-      String str = currentBid.toString().trim();
+    if (finalPrice is int) {
+      total = finalPrice;
+    } else if (finalPrice != null) {
+      String str = finalPrice.toString().trim();
       if (str.toUpperCase().contains('L')) {
         String numStr = str.replaceAll(RegExp(r'[^0-9.]'), '');
         double val = double.tryParse(numStr) ?? 0;
@@ -108,6 +113,32 @@ class _PaymentScreenState extends State<PaymentScreen>
 
   int get _tokenAmt {
     return math.min(kTokenAmount, _finalTotal);
+  }
+
+  int get _balanceAmt {
+    return _finalTotal - _tokenAmt;
+  }
+
+  String get _paymentStatus {
+    final store = LocalListingsStore();
+    for (var p in store.pendingPayments) {
+      if (p['id']?.toString() == widget.id.toString() ||
+          p['listingId']?.toString() == widget.id.toString()) {
+        return (p['status'] ?? '').toString();
+      }
+    }
+    final listing = store.acceptedListings.firstWhere(
+      (l) => l['id']?.toString() == widget.id.toString(),
+      orElse: () => <String, dynamic>{},
+    );
+    return (listing['paymentStatus'] ?? '').toString();
+  }
+
+  bool get _isTokenConfirmed {
+    final s = _paymentStatus.toUpperCase();
+    return s == 'TOKEN CONFIRMED' ||
+        s == 'BALANCE PENDING VERIFICATION' ||
+        s == 'PAID';
   }
 
   Future<void> _openCheckout() async {
@@ -219,6 +250,27 @@ class _PaymentScreenState extends State<PaymentScreen>
                           final XFile? image = await picker.pickImage(
                               source: ImageSource.gallery);
                           if (image != null) {
+                            final nameLower = image.name.toLowerCase();
+                            final isJpgOrPng = nameLower.endsWith('.jpg') ||
+                                nameLower.endsWith('.jpeg') ||
+                                nameLower.endsWith('.png');
+                            if (!isJpgOrPng) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Invalid file format. Please upload a JPG or PNG image.')),
+                                );
+                              }
+                              return;
+                            }
+                            final bytes = await image.readAsBytes();
+                            if (bytes.length > 5 * 1024 * 1024) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Screenshot file size must not exceed 5MB.')),
+                                );
+                              }
+                              return;
+                            }
                             setModalState(() => _screenshot = image);
                           }
                         },
@@ -288,7 +340,7 @@ class _PaymentScreenState extends State<PaymentScreen>
 
     final amt = type == 'token'
         ? _tokenAmt
-        : (_finalTotal - _tokenAmt);
+        : _balanceAmt;
 
     // TODO: Frontend can only check UTR format and duplicates, and require a screenshot —
     // it CANNOT cryptographically verify a real bank/UPI transaction occurred.
@@ -300,16 +352,38 @@ class _PaymentScreenState extends State<PaymentScreen>
     final prefs = await SharedPreferences.getInstance();
     final realName = prefs.getString('user_name_$normalizedPhone') ?? 'Unknown User';
 
+    String? screenshotKey;
+    if (_screenshot != null) {
+      try {
+        final bytes = await _screenshot!.readAsBytes();
+        screenshotKey = '$normalizedPhone/${widget.id}/payment_${type}_${DateTime.now().millisecondsSinceEpoch}';
+        await BlobStorage().put(screenshotKey, bytes);
+      } catch (e) {
+        debugPrint('Error saving payment screenshot to BlobStorage: $e');
+      }
+    }
+
+    final status = type == 'token' ? 'TOKEN PENDING VERIFICATION' : 'BALANCE PENDING VERIFICATION';
+
     LocalListingsStore().addPendingPayment({
       'id': widget.id,
+      'listingId': widget.id,
       'vehicle': widget.title,
+      'title': widget.title,
       'buyer': realName,
+      'buyerName': realName,
+      'buyerPhone': normalizedPhone,
+      'phone': normalizedPhone,
       'type': type,
       'amount': amt,
       'utr': utr,
-      'screenshot': _screenshot?.path,
-      'status': 'Pending Verification',
+      'screenshot': screenshotKey ?? _screenshot?.path,
+      'screenshotPath': _screenshot?.path,
+      'status': status,
+      'createdAt': DateTime.now().toIso8601String(),
     });
+
+    LocalListingsStore().updatePaymentStatus(widget.id, status);
 
     PaymentRecordsStore().recordUtr(utr);
 
@@ -321,24 +395,34 @@ class _PaymentScreenState extends State<PaymentScreen>
     setState(() => _isLoading = false);
 
     if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Text('Pending Verification'),
-          content: const Text(
-              'Submitted for verification. Our team will confirm your payment within 24 hours after checking your transaction ID and screenshot.'),
-          actions: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                context.pop(true);
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
+      if (type == 'balance') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Balance payment submitted for verification.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        context.go('/my_activity?tab=bids&filter=won');
+      } else {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Pending Verification'),
+            content: const Text(
+                'Submitted for verification. Our team will confirm your payment within 24 hours after checking your transaction ID and screenshot.'),
+            actions: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.pop(true);
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
     }
   }
 
@@ -354,7 +438,13 @@ class _PaymentScreenState extends State<PaymentScreen>
         scrolledUnderElevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: navyBlue),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/browse');
+            }
+          },
         ),
         titleTextStyle: TextStyle(
             color: navyBlue, fontSize: 18, fontWeight: FontWeight.bold),
@@ -433,7 +523,10 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   Widget _buildSummaryCard() {
-    final balanceAmt = _finalTotal - _tokenAmt;
+    final int total = _finalTotal;
+    final int token = _tokenAmt;
+    final int balance = total - token;
+    final balanceAmt = balance;
     final store = LocalListingsStore();
     final listing = store.acceptedListings.firstWhere(
       (l) => l['id'] == widget.id,
@@ -503,17 +596,36 @@ class _PaymentScreenState extends State<PaymentScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Step 1 Token:',
-                  style: TextStyle(
-                      color: _currentStep == 'token'
-                          ? orange
-                          : Colors.grey.shade600,
-                      fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  Text('Step 1 Token:',
+                      style: TextStyle(
+                          color: _isTokenConfirmed
+                              ? const Color(0xFF16A34A)
+                              : (_currentStep == 'token'
+                                  ? orange
+                                  : Colors.grey.shade600),
+                          fontWeight: FontWeight.bold)),
+                  if (_isTokenConfirmed) ...[
+                    const SizedBox(width: 6),
+                    const Icon(Icons.check_circle,
+                        color: Color(0xFF16A34A), size: 16),
+                    const SizedBox(width: 4),
+                    const Text('Paid and confirmed',
+                        style: TextStyle(
+                            color: Color(0xFF16A34A),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ],
+                ],
+              ),
               Text(_formatAmount(_tokenAmt),
                   style: TextStyle(
-                      color: _currentStep == 'token'
-                          ? orange
-                          : Colors.grey.shade600,
+                      color: _isTokenConfirmed
+                          ? const Color(0xFF16A34A)
+                          : (_currentStep == 'token'
+                              ? orange
+                              : Colors.grey.shade600),
                       fontWeight: FontWeight.bold)),
             ],
           ),
@@ -537,7 +649,7 @@ class _PaymentScreenState extends State<PaymentScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'Note: UPI has per-transaction limits, so the balance is paid by bank transfer (NEFT/RTGS).',
+            'Token is paid by UPI. The balance is paid by NEFT/RTGS because UPI has per-transaction limits.',
             style: TextStyle(
                 color: Colors.grey.shade500,
                 fontSize: 11,
@@ -618,10 +730,123 @@ class _PaymentScreenState extends State<PaymentScreen>
     );
   }
 
+  Future<void> _pickScreenshot() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+
+    final nameLower = image.name.toLowerCase();
+    final isJpgOrPng = nameLower.endsWith('.jpg') ||
+        nameLower.endsWith('.jpeg') ||
+        nameLower.endsWith('.png');
+
+    if (!isJpgOrPng) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid file format. Please upload a JPG or PNG image.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    final bytes = await image.readAsBytes();
+    if (bytes.length > 5 * 1024 * 1024) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Screenshot file size must not exceed 5MB.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _screenshot = image;
+    });
+  }
+
+  Future<void> _handleBalanceSubmit() async {
+    final utr = _utrController.text.trim();
+    if (!RegExp(r'^\d{12}$').hasMatch(utr)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid 12-digit UTR/Transaction ID.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_screenshot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment screenshot is required (JPG/PNG, max 5MB).'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final bytes = await _screenshot!.readAsBytes();
+    if (bytes.length > 5 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Screenshot file size must not exceed 5MB.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (PaymentRecordsStore().isUtrAlreadyUsed(utr)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'This transaction ID has already been used. Each payment must have a unique UTR. If you believe this is an error, contact support.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    await _submitPayment('balance', utr);
+  }
+
   Widget _buildBalanceStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_isTokenConfirmed)
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFBBF7D0)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Step 1 Token: Paid and confirmed',
+                    style: TextStyle(
+                      color: Color(0xFF15803D),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Text('Step 2: Pay Balance via Bank Transfer',
             style: TextStyle(
                 color: navyBlue, fontSize: 18, fontWeight: FontWeight.bold)),
@@ -637,31 +862,137 @@ class _PaymentScreenState extends State<PaymentScreen>
               border: Border.all(color: Colors.grey.shade200)),
           child: Column(
             children: [
-              _buildBankDetailRow('Bank', PaymentConfig.bankName),
+              _buildBankDetailRow('Bank', kBankName),
               const Divider(),
-              _buildBankDetailRow('Account Name', PaymentConfig.accountName),
+              _buildBankDetailRow('Account Name', kAccountName),
               const Divider(),
-              _buildBankDetailRow('Account No.', PaymentConfig.accountNumber),
+              _buildBankDetailRow('Account No.', kAccountNumber),
               const Divider(),
-              _buildBankDetailRow('IFSC', PaymentConfig.ifsc),
+              _buildBankDetailRow('IFSC', kIfsc),
             ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text('Submit Payment Details',
+            style: TextStyle(
+                color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _utrController,
+          decoration: const InputDecoration(
+            labelText: 'Transaction/UTR ID (12 digits) *',
+            hintText: 'Enter 12-digit UTR number',
+            border: OutlineInputBorder(),
+          ),
+          keyboardType: TextInputType.number,
+          maxLength: 12,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(12),
+          ],
+          onChanged: (_) => setState(() {}),
+        ),
+        if (_utrController.text.isNotEmpty &&
+            !RegExp(r'^\d{12}$').hasMatch(_utrController.text))
+          const Padding(
+            padding: EdgeInsets.only(top: 4, bottom: 8),
+            child: Text('Enter a valid 12-digit UTR/Transaction ID',
+                style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
+        const SizedBox(height: 12),
+        InkWell(
+          onTap: _pickScreenshot,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: _screenshot != null
+                    ? const Color(0xFF16A34A)
+                    : Colors.grey.shade400,
+                width: _screenshot != null ? 1.5 : 1.0,
+              ),
+              borderRadius: BorderRadius.circular(8),
+              color: _screenshot != null
+                  ? const Color(0xFFF0FDF4)
+                  : Colors.grey.shade50,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _screenshot != null ? Icons.check_circle : Icons.upload_file,
+                  color: _screenshot != null
+                      ? const Color(0xFF16A34A)
+                      : Colors.grey.shade700,
+                  size: 22,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _screenshot != null
+                            ? 'Screenshot: ${_screenshot!.name}'
+                            : 'Upload payment screenshot (required)',
+                        style: TextStyle(
+                          color: _screenshot != null
+                              ? const Color(0xFF15803D)
+                              : navyBlue,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'JPG or PNG only, max 5MB',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_screenshot != null)
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                    onPressed: () {
+                      setState(() {
+                        _screenshot = null;
+                      });
+                    },
+                    tooltip: 'Remove',
+                  ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () => _showVerificationForm('balance'),
+            onPressed: _isLoading ? null : _handleBalanceSubmit,
             style: ElevatedButton.styleFrom(
                 backgroundColor: orange,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12))),
-            child: const Text('Submit UTR Details',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold)),
+            child: _isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Text('Submit UTR Details',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
           ),
         ),
       ],

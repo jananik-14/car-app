@@ -509,6 +509,54 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                       ),
                     ),
                   )
+                else if (_vehicleData['status'] == 'sold')
+                  Positioned(
+                    top: 16,
+                    right: 64,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: navy,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.white, size: 10),
+                          SizedBox(width: 6),
+                          Text('SOLD',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (_vehicleData['status'] == 'ended' || _vehicleData['status'] == 'ended_no_bids' || _vehicleData['endProcessed'] == true)
+                  Positioned(
+                    top: 16,
+                    right: 64,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade700,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.timer_off, color: Colors.white, size: 10),
+                          SizedBox(width: 6),
+                          Text('ENDED',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  )
                 else
                   Positioned(
                     top: 16,
@@ -789,43 +837,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                       final currentPhone = ProfileStorageHelper.normalizePhone(AuthService().currentPhone ?? '');
                       final sellerPhone = ProfileStorageHelper.normalizePhone(_vehicleData['phone'] ?? _vehicleData['sellerPhone'] ?? '');
                       final isActualOwner = widget.isOwner || (currentPhone.isNotEmpty && sellerPhone.isNotEmpty && currentPhone == sellerPhone);
-                      if (_vehicleData['status'] == 'ended' || _vehicleData['status'] == 'ended_no_bids') {
-                        final store = LocalListingsStore();
-                        final bids = store.acceptedBids.where((b) => b['vehicleId'] == widget.vehicleId).toList();
-                        int highest = 0;
-                        String? winnerPhone;
-                        for (var b in bids) {
-                          var rawAmt = b['bidAmountNum'];
-                          int amt = rawAmt is int ? rawAmt : int.tryParse(rawAmt?.toString() ?? '') ?? 0;
-                          if (amt > highest) {
-                            highest = amt;
-                            winnerPhone = b['bidderPhone'] ?? b['bidderUsername'];
-                          }
-                        }
-                        
-                        final bool userWon = highest > 0 && winnerPhone == currentPhone;
-                        
-                        return Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            color: userWon ? Colors.green.withOpacity(0.1) : Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(12),
-                            border: userWon ? Border.all(color: Colors.green) : null,
-                          ),
-                          child: Center(
-                            child: Text(
-                              userWon ? 'You won this auction' : 'Auction ended',
-                              style: TextStyle(
-                                color: userWon ? Colors.green : Colors.grey.shade600,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-                      
                       if (isActualOwner) {
                         return Container(
                           width: double.infinity,
@@ -839,6 +850,46 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                               'Your listing',
                               style: TextStyle(
                                 color: Colors.grey.shade500,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
+                      final status = (_vehicleData['status'] ?? '').toString().toLowerCase();
+                      final isEndedAuction = status == 'ended' || status == 'ended_no_bids' || status == 'sold' || _vehicleData['endProcessed'] == true;
+                      if (isEndedAuction) {
+                        final store = LocalListingsStore();
+                        final bids = store.acceptedBids.where((b) => (b['vehicleId'] ?? b['listingId'])?.toString() == widget.vehicleId).toList();
+                        int highest = 0;
+                        String? winnerPhone = _vehicleData['winnerPhone'];
+                        for (var b in bids) {
+                          var rawAmt = b['bidAmountNum'];
+                          int amt = rawAmt is int ? rawAmt : int.tryParse(rawAmt?.toString() ?? '') ?? 0;
+                          if (amt > highest) {
+                            highest = amt;
+                            winnerPhone ??= b['bidderPhone'] ?? b['bidderUsername'];
+                          }
+                        }
+                        
+                        final normalizedWinner = ProfileStorageHelper.normalizePhone(winnerPhone ?? '');
+                        final bool userWon = (status == 'sold' || highest > 0) && normalizedWinner.isNotEmpty && normalizedWinner == currentPhone;
+                        
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: userWon ? Colors.green.withValues(alpha: 0.1) : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(12),
+                            border: userWon ? Border.all(color: Colors.green) : null,
+                          ),
+                          child: Center(
+                            child: Text(
+                              userWon ? 'You won this auction' : 'Auction ended',
+                              style: TextStyle(
+                                color: userWon ? Colors.green : Colors.grey.shade600,
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),

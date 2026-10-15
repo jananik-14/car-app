@@ -444,26 +444,56 @@ class _AdminPostManagementScreenState extends State<AdminPostManagementScreen> {
                         fontSize: 11,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Vehicle details coming soon')),
-                        );
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'View Details',
-                            style: TextStyle(
-                              color: _orange,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if ((item['status'] ?? '').toString().toLowerCase() == 'live') ...[
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             ),
+                            onPressed: () {
+                              try {
+                                final String itemId = (item['id'] ?? '').toString();
+                                item['endTime'] = DateTime.now().toIso8601String();
+                                LocalListingsStore().endAuction(itemId);
+                                setState(() {});
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Auction ended')),
+                                );
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Error ending auction: $e')),
+                                );
+                              }
+                            },
+                            child: const Text('End auction now (test)', style: TextStyle(fontSize: 11)),
                           ),
-                          Icon(Icons.chevron_right, color: _orange, size: 16),
+                          const SizedBox(width: 4),
                         ],
-                      ),
+                        GestureDetector(
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Vehicle details coming soon')),
+                            );
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'View Details',
+                                style: TextStyle(
+                                  color: _orange,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Icon(Icons.chevron_right, color: _orange, size: 16),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

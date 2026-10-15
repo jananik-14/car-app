@@ -32,7 +32,7 @@ import '../services/auth_service.dart';
 import '../utils/temp_admin_config.dart';
 
 void openVehicleDetail(BuildContext context, String listingId) {
-  context.push('/vehicle_detail/$listingId');
+  context.push('/listing-pdf/$listingId');
 }
 
 class AppRouter {
@@ -205,7 +205,16 @@ class AppRouter {
       ),
       GoRoute(
         path: '/my_activity',
-        builder: (context, state) => const MyActivityScreen(),
+        builder: (context, state) {
+          final tab = state.uri.queryParameters['tab'] ??
+              (state.extra is Map ? (state.extra as Map)['tab'] : null);
+          final filter = state.uri.queryParameters['filter'] ??
+              (state.extra is Map ? (state.extra as Map)['filter'] : null);
+          return MyActivityScreen(
+            initialTab: tab?.toString(),
+            initialFilter: filter?.toString(),
+          );
+        },
       ),
       GoRoute(
         path: '/profile_edit',

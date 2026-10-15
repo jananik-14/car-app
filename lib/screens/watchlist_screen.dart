@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import '../theme/app_theme.dart';
 import '../router/app_router.dart';
 import '../utils/currency_formatter.dart';
 import '../widgets/responsive_nav_scaffold.dart';
@@ -51,15 +49,20 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           for (var savedId in savedVehicleIds) {
             Map<String, dynamic>? realVehicle;
             for (var listing in allListings) {
-              if (listing['id'] == savedId) {
+              if (listing['id']?.toString() == savedId.toString()) {
                 realVehicle = listing;
                 break;
               }
             }
             if (realVehicle == null) continue;
 
-            String status = realVehicle['status'] ?? '';
-            if (status == 'ended' || status == 'ended_no_bids' || status == 'sold' || status == 'bought') {
+            final status = (realVehicle['status'] ?? '').toString().toLowerCase();
+            final now = DateTime.now();
+            final endTime = DateTime.tryParse(realVehicle['endTime']?.toString() ?? '');
+            final bool isPastEnd = endTime != null && (now.isAfter(endTime) || now.isAtSameMomentAs(endTime));
+            final bool isClosed = status == 'ended' || status == 'ended_no_bids' || status == 'sold' || status == 'bought' || realVehicle['endProcessed'] == true || isPastEnd;
+
+            if (isClosed) {
               closedVehicles.add(realVehicle);
             } else if (status == 'live') {
               liveVehicles.add(realVehicle);
@@ -163,13 +166,16 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   }
 
   Widget _buildWatchlistCard(Map<String, dynamic> vehicle) {
-    String status = vehicle['status'] ?? 'live';
-    bool isClosed = status != 'live';
+    String status = (vehicle['status'] ?? 'live').toString().toLowerCase();
+    final now = DateTime.now();
+    final endTime = DateTime.tryParse(vehicle['endTime']?.toString() ?? '');
+    final bool isPastEnd = endTime != null && (now.isAfter(endTime) || now.isAtSameMomentAs(endTime));
+    bool isClosed = status == 'ended' || status == 'ended_no_bids' || status == 'sold' || status == 'bought' || vehicle['endProcessed'] == true || isPastEnd;
 
     // Current price logic
     int highestBid = 0;
     final allBids = LocalListingsStore().acceptedBids;
-    var vehicleBids = allBids.where((b) => b['vehicleId'] == vehicle['id']).toList();
+    var vehicleBids = allBids.where((b) => (b['vehicleId'] ?? b['listingId'])?.toString() == vehicle['id']?.toString()).toList();
     for (var b in vehicleBids) {
       var rawAmt = b['bidAmountNum'];
       int amt = rawAmt is int ? rawAmt : int.tryParse(rawAmt?.toString() ?? '') ?? 0;
@@ -178,22 +184,37 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     
     String currentPriceDisplay;
     String priceLabel;
-    if (highestBid > 0) {
+    if (isClosed) {
+      final finalPrice = vehicle['finalPrice'] ?? highestBid;
+      int finalAmt = finalPrice is int ? finalPrice : int.tryParse(finalPrice?.toString() ?? '') ?? 0;
+      if (finalAmt > 0) {
+        currentPriceDisplay = _formatPrice(finalAmt);
+        priceLabel = status == 'sold' ? 'Sold Price' : 'Final Price';
+      } else {
+        var rawPrice = vehicle['price'] ?? vehicle['startPrice'];
+        int priceAmt = rawPrice is int ? rawPrice : int.tryParse(rawPrice?.toString() ?? '') ?? 0;
+        currentPriceDisplay = _formatPrice(priceAmt > 0 ? priceAmt : 0);
+        priceLabel = 'Final Price';
+      }
+    } else if (highestBid > 0) {
       currentPriceDisplay = _formatPrice(highestBid);
       priceLabel = 'Current highest bid';
     } else {
       var rawStart = vehicle['startPrice'];
       int startAmt = rawStart is int ? rawStart : int.tryParse(rawStart?.toString() ?? '') ?? 0;
-      // Never show 0 if there's no bid. If startAmt is also 0 somehow, fallback to vehicle['price'] maybe or just show it as is (but the prompt says "Never show 0", so maybe I should ensure startPrice > 0, but _formatPrice already formats it. Wait, the prompt says "Never show 0." Let's handle if startAmt is 0)
       if (startAmt == 0) {
         var rawPrice = vehicle['price'];
-        startAmt = rawPrice is int ? rawPrice : int.tryParse(rawPrice?.toString() ?? '') ?? 1; // 1 prevents 0
+        startAmt = rawPrice is int ? rawPrice : int.tryParse(rawPrice?.toString() ?? '') ?? 1;
       }
       currentPriceDisplay = _formatPrice(startAmt > 0 ? startAmt : 1);
-      if (currentPriceDisplay == '₹1' || currentPriceDisplay == '₹0' || currentPriceDisplay == '-') {
-          // just in case, but formatting prevents 0.
-      }
       priceLabel = 'Starting amount';
+    }
+
+    String tagLabel = 'Ended';
+    Color tagColor = Colors.black.withValues(alpha: 0.7);
+    if (status == 'sold') {
+      tagLabel = 'Sold';
+      tagColor = navyBlue.withValues(alpha: 0.9);
     }
 
     return GestureDetector(
@@ -226,11 +247,11 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   left: 12,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(16)),
+                    decoration: BoxDecoration(color: isClosed ? tagColor : Colors.black.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(16)),
                     child: isClosed 
-                        ? const Text('Ended', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))
+                        ? Text(tagLabel, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))
                         : CountdownTimer(
-                            endTime: vehicle['endTime'] != null ? DateTime.parse(vehicle['endTime']) : DateTime.now().add(const Duration(hours: 48)),
+                            endTime: vehicle['endTime'] != null ? DateTime.tryParse(vehicle['endTime'].toString()) ?? DateTime.now().add(const Duration(hours: 48)) : DateTime.now().add(const Duration(hours: 48)),
                             style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                   ),

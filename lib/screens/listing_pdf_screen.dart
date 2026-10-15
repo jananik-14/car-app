@@ -11,6 +11,8 @@ class ListingPdfScreen extends StatelessWidget {
 
   const ListingPdfScreen({super.key, required this.listingId});
 
+  static bool _b(dynamic v) => v == true || v == 1 || v == 'true';
+
   @override
   Widget build(BuildContext context) {
     final allListings = [
@@ -26,7 +28,19 @@ class ListingPdfScreen extends StatelessWidget {
 
     if (listing.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Listing PDF')),
+        appBar: AppBar(
+          title: const Text('Listing PDF'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/browse');
+              }
+            },
+          ),
+        ),
         body: const Center(child: Text('Listing not found')),
       );
     }
@@ -53,7 +67,7 @@ class ListingPdfScreen extends StatelessWidget {
             if (context.canPop()) {
               context.pop();
             } else {
-              context.go('/my_activity');
+              context.go('/browse');
             }
           },
         ),

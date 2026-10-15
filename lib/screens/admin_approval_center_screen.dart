@@ -7,6 +7,7 @@
 // PATCH /api/admin/subscriptions/:id (approve/reject)
 
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +15,7 @@ import '../widgets/admin_navigation_drawer.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../widgets/admin_app_bar.dart';
 import '../utils/local_listings_store.dart';
+import '../utils/blob_storage.dart';
 import '../services/subscription_store.dart';
 import '../services/client_notification_store.dart';
 import '../config/app_config.dart';
@@ -37,6 +39,8 @@ class AdminApprovalCenterScreen extends StatefulWidget {
 class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   String _s(dynamic v, [String f = '']) => v == null ? f : v.toString();
   int _i(dynamic v, [int f = 0]) => v is int ? v : (int.tryParse('$v') ?? f);
+  bool _b(dynamic v, [bool f = false]) => v == true || v == 1 || v == 'true';
+  bool _isProcessing = false;
 
   late MainCategory _selectedCategory;
   SubState _selectedSubState = SubState.pending;
@@ -70,18 +74,75 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
       LocalListingsStore().pendingSubscriptions.length +
       LocalListingsStore()
           .pendingPayments
-          .where((p) => p['status'] != 'PAID')
+          .where((p) =>
+              p['status'] == 'TOKEN PENDING VERIFICATION' ||
+              p['status'] == 'BALANCE PENDING VERIFICATION')
           .length;
 
   void _showDocumentViewerPlaceholder(String? imagePath) {
-    if (imagePath != null && imagePath.isNotEmpty) {
+    final path = _s(imagePath).trim();
+    if (path.isNotEmpty) {
       showDialog(
         context: context,
         builder: (ctx) => Dialog(
           child: Stack(
             children: [
-              InteractiveViewer(
-                child: Image.file(File(imagePath), fit: BoxFit.contain),
+              FutureBuilder<Uint8List?>(
+                future: BlobStorage().get(path),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const SizedBox(
+                      height: 250,
+                      width: 300,
+                      child: Center(
+                        child: Text('Document preview not available'),
+                      ),
+                    );
+                  }
+                  if (snapshot.data != null && snapshot.data!.isNotEmpty) {
+                    return InteractiveViewer(
+                      child: Image.memory(
+                        snapshot.data!,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => const SizedBox(
+                          height: 250,
+                          width: 300,
+                          child: Center(
+                            child: Text('Document preview not available'),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                  bool fileExists = false;
+                  try {
+                    fileExists = File(path).existsSync();
+                  } catch (_) {
+                    fileExists = false;
+                  }
+                  if (fileExists) {
+                    return InteractiveViewer(
+                      child: Image.file(
+                        File(path),
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => const SizedBox(
+                          height: 250,
+                          width: 300,
+                          child: Center(
+                            child: Text('Document preview not available'),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                  return const SizedBox(
+                    height: 250,
+                    width: 300,
+                    child: Center(
+                      child: Text('Document preview not available'),
+                    ),
+                  );
+                },
               ),
               Positioned(
                 top: 8,
@@ -129,177 +190,260 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   }
 
   void _handleApprove(String id, MainCategory category) {
-    setState(() {
-      if (category == MainCategory.vehiclePosts) {
-        final idx = LocalListingsStore().pendingListings.indexWhere((e) => e['id'] == id);
-        if (idx != -1) {
-          final item = LocalListingsStore().pendingListings[idx]; // Don't remove here, acceptListing does it
-          final durationHours = item['durationHours'] ?? 48;
-          final publishedAt = DateTime.now();
-          final endTime = publishedAt.add(Duration(hours: durationHours));
-          
-          LocalListingsStore().acceptListing({
-            ...item,
-            'status': 'live',
-            'publishedAt': publishedAt.toIso8601String(),
-            'endTime': endTime.toIso8601String(),
-            'endProcessed': false,
-            'ref':
-                'V-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-            'time': 'Approved just now',
-          });
-          final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your listing "${item['title']}" is now live. Auction ends on ${endTime.toString().substring(0, 16)} ($durationHours hrs)',
-            'listing_live',
-            sellerPhone,
-            refId: id,
-          );
-        } else {
-          final item = LocalListingsStore()
-              .pendingListings
-              .firstWhere((e) => e['id'] == id);
-          final durationHours = item['durationHours'] ?? 48;
-          final publishedAt = DateTime.now();
-          final endTime = publishedAt.add(Duration(hours: durationHours));
+    if (_isProcessing) return;
+    _isProcessing = true;
 
-          LocalListingsStore().acceptListing({
-            ...item,
-            'status': 'live',
-            'publishedAt': publishedAt.toIso8601String(),
-            'endTime': endTime.toIso8601String(),
-            'endProcessed': false,
-            'ref':
-                'V-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-            'time': 'Approved just now',
-          });
-          final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your listing "${item['title']}" is now live. Auction ends on ${endTime.toString().substring(0, 16)} ($durationHours hrs)',
-            'listing_live',
-            sellerPhone,
-            refId: id,
-          );
-        }
-      } else if (category == MainCategory.bidding) {
-        final idx = LocalListingsStore().pendingBids.indexWhere((e) => e['id'] == id);
-        if (idx != -1) {
-          final item = LocalListingsStore().pendingBids.removeAt(idx);
-          LocalListingsStore().acceptedBids.insert(0, {
-            'id': item['id'],
-            'title': item['title'],
-            'price': item['bidAmount'], // approximation
-            'bidderName': item['bidderName'],
-            'ref':
-                'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-            'time': 'Accepted just now',
-          });
-          final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your bid on "${item['title']}" was accepted!',
-            'bid_won',
-            bidderPhone,
-            refId: item['vehicleId'] ?? item['id'],
-          );
-        } else {
-          final item =
-              LocalListingsStore().pendingBids.firstWhere((e) => e['id'] == id);
-          LocalListingsStore().acceptBid({
-            ...item,
-            'ref':
-                'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-            'time': 'Accepted just now',
-          });
-          final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your bid on "${item['title']}" was accepted!',
-            'bid_won',
-            bidderPhone,
-            refId: item['vehicleId'] ?? item['id'],
-          );
-        }
-      } else if (category == MainCategory.subscriptions) {
-        final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
-        if (idx != -1) {
-          final item = LocalListingsStore().pendingSubscriptions.removeAt(idx);
-          if (item['phone'] != null && item['planId'] != null) {
-            SubscriptionStore().activate(item['phone'], item['planId']);
+    try {
+      if (category == MainCategory.payments) {
+        final store = LocalListingsStore();
+        final pendingSnapshot = List<Map<String, dynamic>>.from(store.pendingPayments);
+        final item = pendingSnapshot.firstWhere(
+          (e) => _s(e['id']) == _s(id) || _s(e['listingId']) == _s(id),
+          orElse: () => <String, dynamic>{},
+        );
+
+        final allListings = [
+          ...store.acceptedListings,
+          ...store.pendingListings,
+          ...store.rejectedListings,
+        ];
+        final listing = allListings.firstWhere(
+          (l) => _s(l['id']) == _s(id),
+          orElse: () => <String, dynamic>{},
+        );
+
+        final sellerPhone = _s(listing['sellerPhone'] ?? listing['phone']);
+        final vehicleTitle = _s(item['vehicle'] ?? item['title'] ?? listing['title'], 'Vehicle');
+        final buyerPhone = _s(item['buyerPhone'] ?? item['phone'] ?? listing['winnerPhone']);
+        final itemType = _s(item['type'], 'token').toLowerCase();
+        final amount = _i(item['amount']);
+
+        final String newStatus = itemType == 'token' ? 'TOKEN CONFIRMED' : 'PAID';
+
+        // Update status exactly once, which notifies listeners
+        store.updatePaymentStatus(id, newStatus);
+
+        if (itemType == 'token') {
+          if (buyerPhone.isNotEmpty) {
+            ClientNotificationStore().addNotification(
+              'Your token payment of ₹$amount for $vehicleTitle has been confirmed. You can now pay the remaining balance.',
+              'token_confirmed',
+              buyerPhone,
+              refId: id,
+              recipientRole: 'buyer',
+            );
           }
-          LocalListingsStore().acceptedSubscriptions.insert(0, {
-            'id': item['id'],
-            'businessName': item['businessName'],
-            'tier': item['tier'],
-            'price': item['price'],
-            'id1Label': item['id1Label'],
-            'id1Value': item['id1Value'],
-            'ref':
-                'SUB-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-            'time': 'Approved just now',
-          });
-          final requesterPhone = item['phone'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your ${item['tier']} subscription is now active!',
-            'subscription_active',
-            requesterPhone,
-            refId: id,
-          );
-        } else {
-          final item = LocalListingsStore().pendingSubscriptions
-              .firstWhere((e) => e['id'] == id);
-          if (item['phone'] != null && item['planId'] != null) {
-            SubscriptionStore().activate(item['phone'], item['planId']);
+          if (sellerPhone.isNotEmpty) {
+            ClientNotificationStore().addNotification(
+              'Token payment of ₹$amount for $vehicleTitle has been confirmed.',
+              'token_confirmed',
+              sellerPhone,
+              refId: id,
+              recipientRole: 'seller',
+            );
           }
-          LocalListingsStore().acceptSubscription({
-            ...item,
-            'ref':
-                'SUB-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-            'time': 'Approved just now',
-          });
-          final requesterPhone = item['phone'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your ${item['tier']} subscription is now active! Valid until 1 Year.',
-            'subscription_active',
-            requesterPhone,
-            refId: id,
-          );
-        }
-      } else if (category == MainCategory.payments) {
-        final item = LocalListingsStore()
-            .pendingPayments
-            .firstWhere((e) => e['id'] == id);
-        if (item['type'] == 'token') {
-          LocalListingsStore().updatePaymentStatus(id, 'TOKEN CONFIRMED');
-          final buyerPhone = item['phone'] ?? item['buyerPhone'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your payment of ₹${item['amount']} has been confirmed.',
-            'payment',
-            buyerPhone,
-            refId: id,
-          );
         } else {
-          LocalListingsStore().updatePaymentStatus(id, 'PAID');
-          final buyerPhone = item['phone'] ?? item['buyerPhone'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your payment of ₹${item['amount']} has been confirmed.',
-            'payment',
-            buyerPhone,
-            refId: id,
+          if (buyerPhone.isNotEmpty) {
+            ClientNotificationStore().addNotification(
+              'Your balance payment of ₹$amount for $vehicleTitle has been confirmed. Payment completed.',
+              'balance_paid',
+              buyerPhone,
+              refId: id,
+              recipientRole: 'buyer',
+            );
+          }
+          if (sellerPhone.isNotEmpty) {
+            ClientNotificationStore().addNotification(
+              'Full payment of ₹$amount for $vehicleTitle has been confirmed. Payment completed.',
+              'balance_paid',
+              sellerPhone,
+              refId: id,
+              recipientRole: 'seller',
+            );
+          }
+        }
+
+        if (mounted) {
+          setState(() {});
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Payment confirmed')),
           );
         }
+        return;
       }
-    });
 
-    String msg = category == MainCategory.vehiclePosts
-        ? "Vehicle published successfully"
-        : category == MainCategory.bidding
-            ? "Bid accepted"
-            : category == MainCategory.payments
-                ? "Payment confirmed"
-                : "Subscription approved";
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      setState(() {
+        if (category == MainCategory.vehiclePosts) {
+          final idx = LocalListingsStore().pendingListings.indexWhere((e) => e['id'] == id);
+          if (idx != -1) {
+            final item = LocalListingsStore().pendingListings[idx]; // Don't remove here, acceptListing does it
+            final durationHours = item['durationHours'] ?? 48;
+            final publishedAt = DateTime.now();
+            final endTime = publishedAt.add(Duration(hours: durationHours));
+            
+            LocalListingsStore().acceptListing({
+              ...item,
+              'status': 'live',
+              'publishedAt': publishedAt.toIso8601String(),
+              'endTime': endTime.toIso8601String(),
+              'endProcessed': false,
+              'ref':
+                  'V-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+              'time': 'Approved just now',
+            });
+            final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your listing "${item['title']}" is now live. Auction ends on ${endTime.toString().substring(0, 16)} ($durationHours hrs)',
+              'listing_live',
+              sellerPhone,
+              refId: id,
+              recipientRole: 'seller',
+            );
+          } else {
+            final item = LocalListingsStore()
+                .pendingListings
+                .firstWhere((e) => e['id'] == id);
+            final durationHours = item['durationHours'] ?? 48;
+            final publishedAt = DateTime.now();
+            final endTime = publishedAt.add(Duration(hours: durationHours));
+
+            LocalListingsStore().acceptListing({
+              ...item,
+              'status': 'live',
+              'publishedAt': publishedAt.toIso8601String(),
+              'endTime': endTime.toIso8601String(),
+              'endProcessed': false,
+              'ref':
+                  'V-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+              'time': 'Approved just now',
+            });
+            final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your listing "${item['title']}" is now live. Auction ends on ${endTime.toString().substring(0, 16)} ($durationHours hrs)',
+              'listing_live',
+              sellerPhone,
+              refId: id,
+              recipientRole: 'seller',
+            );
+          }
+        } else if (category == MainCategory.bidding) {
+          final idx = LocalListingsStore().pendingBids.indexWhere((e) => e['id'] == id);
+          if (idx != -1) {
+            final item = LocalListingsStore().pendingBids.removeAt(idx);
+            LocalListingsStore().acceptedBids.insert(0, {
+              'id': item['id'],
+              'title': item['title'],
+              'price': item['bidAmount'], // approximation
+              'bidderName': item['bidderName'],
+              'ref':
+                  'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+              'time': 'Accepted just now',
+            });
+            final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your bid on "${item['title']}" was accepted!',
+              'bid_won',
+              bidderPhone,
+              refId: item['vehicleId'] ?? item['id'],
+              recipientRole: 'buyer',
+            );
+          } else {
+            final item =
+                LocalListingsStore().pendingBids.firstWhere((e) => e['id'] == id);
+            LocalListingsStore().acceptBid({
+              ...item,
+              'ref':
+                  'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+              'time': 'Accepted just now',
+            });
+            final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your bid on "${item['title']}" was accepted!',
+              'bid_won',
+              bidderPhone,
+              refId: item['vehicleId'] ?? item['id'],
+              recipientRole: 'buyer',
+            );
+          }
+        } else if (category == MainCategory.subscriptions) {
+          final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
+          if (idx != -1) {
+            final item = LocalListingsStore().pendingSubscriptions.removeAt(idx);
+            if (item['phone'] != null && item['planId'] != null) {
+              SubscriptionStore().activate(item['phone'], item['planId']);
+            }
+            LocalListingsStore().acceptedSubscriptions.insert(0, {
+              'id': item['id'],
+              'businessName': item['businessName'],
+              'tier': item['tier'],
+              'price': item['price'],
+              'id1Label': item['id1Label'],
+              'id1Value': item['id1Value'],
+              'ref':
+                  'SUB-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+              'time': 'Approved just now',
+            });
+            final requesterPhone = item['phone'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your ${item['tier']} subscription is now active!',
+              'subscription_active',
+              requesterPhone,
+              refId: id,
+            );
+          } else {
+            final item = LocalListingsStore().pendingSubscriptions
+                .firstWhere((e) => e['id'] == id);
+            if (item['phone'] != null && item['planId'] != null) {
+              SubscriptionStore().activate(item['phone'], item['planId']);
+            }
+            LocalListingsStore().acceptSubscription({
+              ...item,
+              'ref':
+                  'SUB-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+              'time': 'Approved just now',
+            });
+            final requesterPhone = item['phone'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your ${item['tier']} subscription is now active! Valid until 1 Year.',
+              'subscription_active',
+              requesterPhone,
+              refId: id,
+            );
+          }
+        }
+      });
+
+      String msg = category == MainCategory.vehiclePosts
+          ? "Vehicle published successfully"
+          : category == MainCategory.bidding
+              ? "Bid accepted"
+              : "Subscription approved";
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e, stack) {
+      debugPrint('PAYMENT APPROVE ERROR: $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error approving item: $e'),
+            backgroundColor: _red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      } else {
+        _isProcessing = false;
+      }
+    }
   }
 
   void _handleReject(String id, MainCategory category) {
+    if (_isProcessing) return;
     TextEditingController reasonController = TextEditingController();
 
     showDialog(
@@ -337,134 +481,213 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   }
 
   void _processRejection(String id, MainCategory category, String reason) {
-    setState(() {
-      if (category == MainCategory.vehiclePosts) {
-        final idx = LocalListingsStore().pendingListings.indexWhere((e) => e['id'] == id);
-        if (idx != -1) {
-          final item = LocalListingsStore().pendingListings[idx]; // Don't remove here, rejectListing does it
-          
-          LocalListingsStore().rejectListing({
-            ...item,
-            'status': 'rejected',
-            'rejectReason': reason,
-            'reason': reason,
-            'time': 'Declined just now',
-          });
-          final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
+    if (_isProcessing) return;
+    _isProcessing = true;
+
+    try {
+      if (category == MainCategory.payments) {
+        final store = LocalListingsStore();
+        final pendingSnapshot = List<Map<String, dynamic>>.from(store.pendingPayments);
+        final item = pendingSnapshot.firstWhere(
+          (e) => _s(e['id']) == _s(id) || _s(e['listingId']) == _s(id),
+          orElse: () => <String, dynamic>{},
+        );
+
+        final allListings = [
+          ...store.acceptedListings,
+          ...store.pendingListings,
+          ...store.rejectedListings,
+        ];
+        final listing = allListings.firstWhere(
+          (l) => _s(l['id']) == _s(id),
+          orElse: () => <String, dynamic>{},
+        );
+
+        final sellerPhone = _s(listing['sellerPhone'] ?? listing['phone']);
+        final vehicleTitle = _s(item['vehicle'] ?? item['title'] ?? listing['title'], 'Vehicle');
+        final buyerPhone = _s(item['buyerPhone'] ?? item['phone'] ?? listing['winnerPhone']);
+        final amount = _i(item['amount']);
+
+        // Reject: back to 'PAYMENT PENDING' with reason
+        store.updatePaymentStatus(id, 'PAYMENT PENDING');
+
+        store.rejectPayment({
+          ...item,
+          'status': 'PAYMENT REJECTED',
+          'rejectionReason': reason,
+          'reason': reason,
+          'time': 'Declined just now',
+        });
+
+        if (buyerPhone.isNotEmpty) {
           ClientNotificationStore().addNotification(
-            'Your listing "${item['title']}" was rejected. Reason: $reason',
-            'listing_rejected',
+            'Your payment of ₹$amount for $vehicleTitle was rejected. Reason: $reason',
+            'payment_rejected',
+            buyerPhone,
+            refId: id,
+            recipientRole: 'buyer',
+          );
+        }
+        if (sellerPhone.isNotEmpty) {
+          ClientNotificationStore().addNotification(
+            'Payment of ₹$amount for $vehicleTitle was rejected by admin. Reason: $reason',
+            'payment_rejected',
             sellerPhone,
             refId: id,
-          );
-        } else {
-          final item = LocalListingsStore()
-              .pendingListings
-              .firstWhere((e) => e['id'] == id);
-          LocalListingsStore().rejectListing({
-            ...item,
-            'status': 'rejected',
-            'rejectReason': reason,
-            'reason': reason,
-            'time': 'Declined just now',
-          });
-          final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your listing "${item['title']}" was rejected. Reason: $reason',
-            'listing_rejected',
-            sellerPhone,
-            refId: id,
+            recipientRole: 'seller',
           );
         }
-      } else if (category == MainCategory.bidding) {
-        final idx = LocalListingsStore().pendingBids.indexWhere((e) => e['id'] == id);
-        if (idx != -1) {
-          final item = LocalListingsStore().pendingBids.removeAt(idx);
-          LocalListingsStore().rejectedBids.insert(0, {
-            'id': item['id'],
-            'title': item['title'],
-            'price': item['bidAmount'],
-            'bidderName': item['bidderName'],
-            'reason': reason,
-            'time': 'Declined just now',
-          });
-          final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your bid on "${item['title']}" was not accepted.',
-            'bid_lost',
-            bidderPhone,
-            refId: item['vehicleId'] ?? item['id'],
-          );
-        } else {
-          final item =
-              LocalListingsStore().pendingBids.firstWhere((e) => e['id'] == id);
-          LocalListingsStore().rejectBid({
-            ...item,
-            'reason': reason,
-            'time': 'Declined just now',
-          });
-          final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your bid on "${item['title']}" was not accepted.',
-            'bid_lost',
-            bidderPhone,
-            refId: item['vehicleId'] ?? item['id'],
+
+        if (mounted) {
+          setState(() {});
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Payment rejected')),
           );
         }
-      } else if (category == MainCategory.subscriptions) {
-        final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
-        if (idx != -1) {
-          final item = LocalListingsStore().pendingSubscriptions.removeAt(idx);
-          if (item['phone'] != null) {
-            SubscriptionStore().reject(item['phone']);
+        return;
+      }
+
+      setState(() {
+        if (category == MainCategory.vehiclePosts) {
+          final idx = LocalListingsStore().pendingListings.indexWhere((e) => e['id'] == id);
+          if (idx != -1) {
+            final item = LocalListingsStore().pendingListings[idx]; // Don't remove here, rejectListing does it
+            
+            LocalListingsStore().rejectListing({
+              ...item,
+              'status': 'rejected',
+              'rejectReason': reason,
+              'reason': reason,
+              'time': 'Declined just now',
+            });
+            final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your listing "${item['title']}" was rejected. Reason: $reason',
+              'listing_rejected',
+              sellerPhone,
+              refId: id,
+              recipientRole: 'seller',
+            );
+          } else {
+            final item = LocalListingsStore()
+                .pendingListings
+                .firstWhere((e) => e['id'] == id);
+            LocalListingsStore().rejectListing({
+              ...item,
+              'status': 'rejected',
+              'rejectReason': reason,
+              'reason': reason,
+              'time': 'Declined just now',
+            });
+            final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your listing "${item['title']}" was rejected. Reason: $reason',
+              'listing_rejected',
+              sellerPhone,
+              refId: id,
+              recipientRole: 'seller',
+            );
           }
-          LocalListingsStore().rejectedSubscriptions.insert(0, {
-            'id': item['id'],
-            'businessName': item['businessName'],
-            'tier': item['tier'],
-            'dealerName': 'Dealer',
-            'reason': reason,
-            'time': 'Declined just now',
-          });
-          final requesterPhone = item['phone'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your subscription request was declined. Reason: $reason',
-            'subscription_rejected',
-            requesterPhone,
-            refId: id,
-          );
-        } else {
-          final item = LocalListingsStore().pendingSubscriptions
-              .firstWhere((e) => e['id'] == id);
-          if (item['phone'] != null) {
-            SubscriptionStore().reject(item['phone']);
+        } else if (category == MainCategory.bidding) {
+          final idx = LocalListingsStore().pendingBids.indexWhere((e) => e['id'] == id);
+          if (idx != -1) {
+            final item = LocalListingsStore().pendingBids.removeAt(idx);
+            LocalListingsStore().rejectedBids.insert(0, {
+              'id': item['id'],
+              'title': item['title'],
+              'price': item['bidAmount'],
+              'bidderName': item['bidderName'],
+              'reason': reason,
+              'time': 'Declined just now',
+            });
+            final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your bid on "${item['title']}" was not accepted.',
+              'bid_lost',
+              bidderPhone,
+              refId: item['vehicleId'] ?? item['id'],
+              recipientRole: 'buyer',
+            );
+          } else {
+            final item =
+                LocalListingsStore().pendingBids.firstWhere((e) => e['id'] == id);
+            LocalListingsStore().rejectBid({
+              ...item,
+              'reason': reason,
+              'time': 'Declined just now',
+            });
+            final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your bid on "${item['title']}" was not accepted.',
+              'bid_lost',
+              bidderPhone,
+              refId: item['vehicleId'] ?? item['id'],
+              recipientRole: 'buyer',
+            );
           }
-          LocalListingsStore().rejectSubscription({
-            ...item,
-            'dealerName': item['dealerName'] ?? 'Dealer',
-            'reason': reason,
-            'time': 'Declined just now',
-          });
-          final requesterPhone = item['phone'] ?? '';
-          ClientNotificationStore().addNotification(
-            'Your subscription request was declined. Reason: $reason',
-            'subscription_rejected',
-            requesterPhone,
-            refId: id,
-          );
+        } else if (category == MainCategory.subscriptions) {
+          final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
+          if (idx != -1) {
+            final item = LocalListingsStore().pendingSubscriptions.removeAt(idx);
+            if (item['phone'] != null) {
+              SubscriptionStore().reject(item['phone']);
+            }
+            LocalListingsStore().rejectedSubscriptions.insert(0, {
+              'id': item['id'],
+              'businessName': item['businessName'],
+              'tier': item['tier'],
+              'dealerName': 'Dealer',
+              'reason': reason,
+              'time': 'Declined just now',
+            });
+            final requesterPhone = item['phone'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your subscription request was declined. Reason: $reason',
+              'subscription_rejected',
+              requesterPhone,
+              refId: id,
+            );
+          } else {
+            final item = LocalListingsStore().pendingSubscriptions
+                .firstWhere((e) => e['id'] == id);
+            if (item['phone'] != null) {
+              SubscriptionStore().reject(item['phone']);
+            }
+            LocalListingsStore().rejectSubscription({
+              ...item,
+              'dealerName': item['dealerName'] ?? 'Dealer',
+              'reason': reason,
+              'time': 'Declined just now',
+            });
+            final requesterPhone = item['phone'] ?? '';
+            ClientNotificationStore().addNotification(
+              'Your subscription request was declined. Reason: $reason',
+              'subscription_rejected',
+              requesterPhone,
+              refId: id,
+            );
+          }
         }
-      } else if (category == MainCategory.payments) {
-        LocalListingsStore().updatePaymentStatus(id, 'PAYMENT REJECTED');
-        final item = LocalListingsStore().pendingPayments.firstWhere((e) => e['id'] == id);
-        final buyerPhone = item['phone'] ?? item['buyerPhone'] ?? '';
-        ClientNotificationStore().addNotification(
-          'Your payment of ₹${item['amount'] ?? ''} was rejected. Reason: $reason',
-          'payment_rejected',
-          buyerPhone,
-          refId: id,
+      });
+    } catch (e, stack) {
+      debugPrint('PAYMENT APPROVE ERROR: $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error rejecting item: $e'),
+            backgroundColor: _red,
+          ),
         );
       }
-    });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      } else {
+        _isProcessing = false;
+      }
+    }
   }
 
   @override
@@ -566,7 +789,9 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                   'Payments',
                   LocalListingsStore()
                       .pendingPayments
-                      .where((p) => p['status'] != 'PAID')
+                      .where((p) =>
+                          p['status'] == 'TOKEN PENDING VERIFICATION' ||
+                          p['status'] == 'BALANCE PENDING VERIFICATION')
                       .length),
             ],
           ),
@@ -710,17 +935,39 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   // PAYMENTS
   // ==========================================
   Widget _buildPaymentsContent() {
-    final allPayments = LocalListingsStore().pendingPayments;
+    final allPayments = List<Map<String, dynamic>>.from(
+      LocalListingsStore().pendingPayments.map((p) => Map<String, dynamic>.from(p)),
+    );
     final pending = allPayments
-        .where((p) =>
-            p['status'] == 'TOKEN PENDING VERIFICATION' ||
-            p['status'] == 'BALANCE PENDING VERIFICATION')
+        .where((p) {
+          final s = _s(p['status']);
+          return s == 'TOKEN PENDING VERIFICATION' || s == 'BALANCE PENDING VERIFICATION';
+        })
         .toList();
     final accepted = allPayments
-        .where((p) => p['status'] == 'TOKEN CONFIRMED' || p['status'] == 'PAID')
+        .where((p) {
+          final s = _s(p['status']);
+          return s == 'TOKEN CONFIRMED' || s == 'PAID';
+        })
         .toList();
-    final rejected =
-        allPayments.where((p) => p['status'] == 'PAYMENT REJECTED').toList();
+    final rejectedStore = List<Map<String, dynamic>>.from(
+      LocalListingsStore().rejectedPayments.map((p) => Map<String, dynamic>.from(p)),
+    );
+    final rejected = [
+      ...rejectedStore,
+      ...allPayments.where((p) {
+        final s = _s(p['status']);
+        final rejectionReason = _s(p['rejectionReason']);
+        final reason = _s(p['reason']);
+        final hasReason = rejectionReason.isNotEmpty || reason.isNotEmpty;
+        return s == 'PAYMENT REJECTED' ||
+            (hasReason &&
+                s != 'TOKEN PENDING VERIFICATION' &&
+                s != 'BALANCE PENDING VERIFICATION' &&
+                s != 'TOKEN CONFIRMED' &&
+                s != 'PAID');
+      }),
+    ];
 
     if (_selectedSubState == SubState.pending) {
       return _buildListScaffold(
@@ -731,7 +978,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         countBadgeColor: Colors.grey.shade200,
         countTextColor: Colors.grey.shade800,
         items: pending,
-        itemBuilder: _buildPendingPaymentCard,
+        itemBuilder: (item) => _buildPendingPaymentCard(item),
       );
     } else if (_selectedSubState == SubState.accepted) {
       return _buildListScaffold(
@@ -742,16 +989,27 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         countBadgeColor: _green.withValues(alpha: 0.1),
         countTextColor: _green,
         items: accepted,
-        itemBuilder: (item) => _buildHistoryCard(
-          icon: Icons.check_circle,
-          iconColor: _green,
-          title: '${item['vehicle']} - ₹${item['amount']}',
-          subtitle: 'Buyer: ${item['buyer']} • UTR: ${item['utr']}',
-          statusLabel: 'Confirmed',
-          statusColor: _green,
-          time: 'Confirmed just now',
-          itemId: item['id'],
-        ),
+        itemBuilder: (item) {
+          final vehicle = _s(item['vehicle'] ?? item['title'], 'Vehicle');
+          final amount = _i(item['amount']);
+          final buyerName = _s(item['buyerName'] ?? item['buyer'], 'Buyer');
+          final buyerPhone = _s(item['buyerPhone'] ?? item['phone']);
+          final type = _s(item['type']).toUpperCase();
+          final utr = _s(item['utr']);
+          final status = _s(item['status']);
+          final time = _s(item['time'], 'Confirmed just now');
+          final id = _s(item['id']);
+          return _buildHistoryCard(
+            icon: Icons.check_circle,
+            iconColor: _green,
+            title: '$vehicle - ₹$amount',
+            subtitle: 'Buyer: $buyerName ($buyerPhone) • Type: $type • UTR: $utr',
+            statusLabel: status == 'PAID' ? 'Paid' : 'Confirmed',
+            statusColor: _green,
+            time: time,
+            itemId: id,
+          );
+        },
       );
     } else {
       return _buildListScaffold(
@@ -762,22 +1020,49 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         countBadgeColor: _red.withValues(alpha: 0.1),
         countTextColor: _red,
         items: rejected,
-        itemBuilder: (item) => _buildHistoryCard(
-          icon: Icons.cancel,
-          iconColor: _red,
-          title: '${item['vehicle']} - ₹${item['amount']}',
-          subtitle: 'Buyer: ${item['buyer']} • UTR: ${item['utr']}',
-          statusLabel: 'Declined',
-          statusColor: _red,
-          time: 'Declined just now',
-        ),
+        itemBuilder: (item) {
+          final vehicle = _s(item['vehicle'] ?? item['title'], 'Vehicle');
+          final amount = _i(item['amount']);
+          final buyerName = _s(item['buyerName'] ?? item['buyer'], 'Buyer');
+          final buyerPhone = _s(item['buyerPhone'] ?? item['phone']);
+          final type = _s(item['type']).toUpperCase();
+          final rejectionReason = _s(item['rejectionReason']);
+          final reasonFallback = _s(item['reason']);
+          final reason = rejectionReason.isNotEmpty
+              ? rejectionReason
+              : (reasonFallback.isNotEmpty ? reasonFallback : 'Declined by admin');
+          final time = _s(item['time'], 'Declined just now');
+          final id = _s(item['id']);
+          return _buildHistoryCard(
+            icon: Icons.cancel,
+            iconColor: _red,
+            title: '$vehicle - ₹$amount',
+            subtitle: 'Buyer: $buyerName ($buyerPhone) • Type: $type • Reason: $reason',
+            statusLabel: 'Declined',
+            statusColor: _red,
+            time: time,
+            itemId: id,
+          );
+        },
       );
     }
   }
 
   Widget _buildPendingPaymentCard(Map<String, dynamic> item) {
+    final id = _s(item['id']);
+    final vehicleTitle = _s(item['vehicle'] ?? item['title'], 'Vehicle');
+    final buyerName = _s(item['buyerName'] ?? item['buyer'], 'Buyer');
+    final buyerPhone = _s(item['buyerPhone'] ?? item['phone']);
+    final amount = _i(item['amount']);
+    final typeRaw = _s(item['type'], 'TOKEN');
+    final type = typeRaw.toUpperCase();
+    final utrRaw = _s(item['utr']);
+    final utr = utrRaw.isNotEmpty ? utrRaw : 'N/A';
+    final status = _s(item['status']);
+    final screenshot = _s(item['screenshot']);
+
     return _buildCardWrapper(
-      itemId: item['id'],
+      itemId: id,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -785,26 +1070,34 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                  child: Text(item['vehicle'],
-                      style: TextStyle(
-                          color: _navy,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15))),
-              Text('₹${item['amount']}',
+                child: Text(
+                  vehicleTitle,
                   style: TextStyle(
-                      color: _navy, fontWeight: FontWeight.bold, fontSize: 15)),
+                    color: _navy,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              Text(
+                '₹$amount',
+                style: TextStyle(
+                  color: _navy,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-              'Buyer: ${item['buyer']} • Type: ${item['type'].toString().toUpperCase()}',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-          
+            'Buyer: $buyerName ($buyerPhone) • Type: $type',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+          ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
           ),
-          
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -812,28 +1105,40 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('PAYMENT REF',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
+                    Text(
+                      'PAYMENT REF',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(item['utr'],
+                        Flexible(
+                          child: Text(
+                            utr,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                                color: _navy,
-                                fontSize: 13,
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w600)),
+                              color: _navy,
+                              fontSize: 13,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 4),
                         GestureDetector(
                           onTap: () {
-                            Clipboard.setData(ClipboardData(text: item['utr']));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            Clipboard.setData(ClipboardData(text: utr));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
                                 content: Text('UTR Copied!'),
-                                duration: Duration(seconds: 1)));
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
                           },
                           child: const Icon(Icons.copy, size: 14, color: Colors.blue),
                         ),
@@ -847,11 +1152,14 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('STATUS',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
+                    Text(
+                      'STATUS',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -859,8 +1167,14 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                         Icon(Icons.check_circle, size: 14, color: _green),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text('Awaiting Verification',
-                              style: TextStyle(color: _green, fontSize: 13, fontWeight: FontWeight.w600)),
+                          child: Text(
+                            status.isNotEmpty ? status : 'Awaiting Verification',
+                            style: TextStyle(
+                              color: _green,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -872,25 +1186,34 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('TYPE',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
+                    Text(
+                      'TYPE',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 8),
-                    Text(item['type'].toString().toUpperCase(),
-                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text(
+                      type,
+                      style: TextStyle(
+                        color: _navy,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
-
+          const SizedBox(height: 14),
+          _buildScreenshotPreview(screenshot),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
           ),
-          
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -898,18 +1221,21 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             runSpacing: 16,
             children: [
               GestureDetector(
-                onTap: () => _showDocumentViewerPlaceholder(item['screenshot']),
+                onTap: () => _showDocumentViewerPlaceholder(screenshot),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.visibility, color: Colors.blue, size: 16),
                     SizedBox(width: 6),
-                    Text('View Documents',
-                        style: TextStyle(
-                            color: Colors.blue,
-                            decoration: TextDecoration.underline,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
+                    Text(
+                      'View Documents',
+                      style: TextStyle(
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -918,7 +1244,9 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                 runSpacing: 12,
                 children: [
                   OutlinedButton(
-                    onPressed: () => _handleReject(item['id'], MainCategory.payments),
+                    onPressed: _isProcessing
+                        ? null
+                        : () => _handleReject(id, MainCategory.payments),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _red,
                       side: BorderSide(color: _red.withValues(alpha: 0.5)),
@@ -930,13 +1258,16 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                     child: const Text('✕ Reject'),
                   ),
                   ElevatedButton(
-                    onPressed: () {
-                      _showConfirmationDialog(
-                        title: 'Confirm Payment Verification',
-                        content: 'Confirm you have verified this UTR (${item['utr']}) matches a real received payment of ₹${item['amount']} in your bank/UPI records?',
-                        onConfirm: () => _handleApprove(item['id'], MainCategory.payments),
-                      );
-                    },
+                    onPressed: _isProcessing
+                        ? null
+                        : () {
+                            _showConfirmationDialog(
+                              title: 'Confirm Payment Verification',
+                              content:
+                                  'Confirm you have verified this UTR ($utr) matches a real received payment of ₹$amount in your bank/UPI records?',
+                              onConfirm: () => _handleApprove(id, MainCategory.payments),
+                            );
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _orange,
                       foregroundColor: Colors.white,
@@ -946,14 +1277,129 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
-                    child: const Text('✓ Confirm Payment'),
+                    child: const Text('✓ Approve'),
                   ),
                 ],
-              )
+              ),
             ],
-          )
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildScreenshotPlaceholder() {
+    return Container(
+      width: 72,
+      height: 72,
+      color: Colors.grey.shade200,
+      child: const Icon(Icons.receipt_long, color: Colors.grey, size: 28),
+    );
+  }
+
+  Widget _buildScreenshotPreview(String? screenshotKey) {
+    final key = _s(screenshotKey);
+    if (key.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.image_not_supported_outlined, size: 16, color: Colors.grey.shade500),
+            const SizedBox(width: 6),
+            Text('No screenshot attached', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'SCREENSHOT PREVIEW',
+          style: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        FutureBuilder<Uint8List?>(
+          future: BlobStorage().get(key),
+          builder: (context, snapshot) {
+            final bytes = snapshot.data;
+            Widget previewImg;
+            if (bytes != null && bytes.isNotEmpty) {
+              previewImg = Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                width: 72,
+                height: 72,
+                errorBuilder: (context, error, stackTrace) => _buildScreenshotPlaceholder(),
+              );
+            } else {
+              bool isLocalFile = false;
+              try {
+                isLocalFile = File(key).existsSync();
+              } catch (_) {
+                isLocalFile = false;
+              }
+
+              if (isLocalFile) {
+                previewImg = Image.file(
+                  File(key),
+                  fit: BoxFit.cover,
+                  width: 72,
+                  height: 72,
+                  errorBuilder: (context, error, stackTrace) => _buildScreenshotPlaceholder(),
+                );
+              } else {
+                previewImg = _buildScreenshotPlaceholder();
+              }
+            }
+
+            return GestureDetector(
+              onTap: () => _showDocumentViewerPlaceholder(key),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    previewImg,
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        color: Colors.black54,
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: const Text(
+                          'Preview',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -1222,16 +1668,26 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
       itemId: _s(item['id']),
     );
     
-    if (kDevMode && item['status'] == 'live') {
+    final itemStatus = _s(item['status']).toLowerCase();
+    if (itemStatus == 'live') {
       return Column(
         children: [
           card,
           TextButton(
             onPressed: () {
-              setState(() {
+              try {
+                final String itemId = _s(item['id']);
                 item['endTime'] = DateTime.now().toIso8601String();
-              });
-              LocalListingsStore().updateListing(item);
+                LocalListingsStore().endAuction(itemId);
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Auction ended')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error ending auction: $e')),
+                );
+              }
             },
             child: const Text("End auction now (test)"),
           )

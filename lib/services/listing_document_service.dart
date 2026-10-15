@@ -127,7 +127,7 @@ class ListingDocumentService {
             _buildSectionTitle('Step 5: Pricing & Auction'),
             _buildInfoTable([
               ['Expected Price', formatPrice(listing['price'])],
-              ['Reserve Price Enabled', listing['reservePriceEnabled'] == true ? 'Yes' : 'No'],
+              ['Reserve Price Enabled', (listing['reservePriceEnabled'] == true || listing['reservePriceEnabled'] == 1 || listing['reservePriceEnabled'] == 'true') ? 'Yes' : 'No'],
               ['Auction Duration (Hrs)', displayVal(listing['durationHours'])],
               ['Current Status', displayVal(listing['status']).toUpperCase()],
               ['Seller Name', displayVal(listing['sellerName'])],

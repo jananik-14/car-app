@@ -1434,16 +1434,19 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             FocusScope.of(context).unfocus();
             final DateTime? picked = await showDatePicker(
               context: context,
-              initialDate: _insuranceExpiryDate ?? DateTime.now(),
+              initialDate: DateTime.now(),
               firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
               lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+              initialEntryMode: DatePickerEntryMode.calendarOnly,
+              helpText: 'Select insurance expiry date',
+              confirmText: 'Select',
+              cancelText: 'Cancel',
               builder: (context, child) {
                 return Theme(
                   data: Theme.of(context).copyWith(
-                    colorScheme: ColorScheme.light(
-                      primary: orange,
-                      onPrimary: Colors.white,
-                      onSurface: navyBlue,
+                    colorScheme: const ColorScheme.light(
+                      primary: Color(0xFFFB7800),
+                      onSurface: Color(0xFF001128),
                     ),
                   ),
                   child: child!,

@@ -26,10 +26,11 @@ class _BrowseVehiclesScreenState extends State<BrowseVehiclesScreen> {
     final store = LocalListingsStore();
     final now = DateTime.now();
     var liveListings = store.acceptedListings.where((v) {
-      if (v['status'] != 'live') return false;
+      if ((v['status'] ?? '').toString().toLowerCase() != 'live') return false;
+      if (v['endProcessed'] == true) return false;
       if (v['endTime'] == null) return false;
-      final endTime = DateTime.parse(v['endTime']);
-      if (endTime.isBefore(now)) return false;
+      final endTime = DateTime.tryParse(v['endTime'].toString());
+      if (endTime == null || endTime.isBefore(now)) return false;
       return true;
     }).toList();
 

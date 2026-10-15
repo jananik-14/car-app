@@ -4,7 +4,9 @@ import '../theme/app_theme.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../services/client_notification_store.dart';
 import '../services/auth_service.dart';
-import '../router/app_router.dart';
+import '../utils/profile_storage_helper.dart';
+import '../utils/local_listings_store.dart';
+
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -238,16 +240,87 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 InkWell(
                   onTap: () {
                     ClientNotificationStore().markAsRead(notif);
-                    if (notif.type == 'listing_live' || notif.type == 'listing_approved' || notif.type == 'listing_rejected' || notif.type == 'sold') {
-                      if (notif.refId != null) openVehicleDetail(context, notif.refId!); else context.push('/my_activity');
-                    } else if (notif.type == 'bid_won' || notif.type == 'bid_lost' || notif.type == 'outbid') {
-                      if (notif.refId != null) openVehicleDetail(context, notif.refId!); else context.push('/my_activity');
-                    } else if (notif.type == 'subscription_active') {
-                      context.push('/subscription');
-                    } else if (notif.type == 'payment' && notif.refId != null) {
-                      context.push('/payment/${notif.refId}');
-                    } else if (notif.type == 'payment') {
-                      context.push('/payment');
+                    final type = notif.effectiveType;
+                    final titleLower = notif.title.toLowerCase();
+
+                    final isPaymentOrSold = type == 'token_confirmed' ||
+                        type == 'balance_paid' ||
+                        type == 'payment_rejected' ||
+                        type == 'payment' ||
+                        type == 'sold' ||
+                        titleLower.contains('token payment') ||
+                        titleLower.contains('full payment') ||
+                        titleLower.contains('sold');
+
+                    if (isPaymentOrSold) {
+                      // 1. Use recipientRole ('seller'/'buyer') stored in notification first
+                      if (notif.recipientRole == 'seller') {
+                        context.go('/my_activity?tab=listings&filter=sold');
+                        return;
+                      } else if (notif.recipientRole == 'buyer') {
+                        context.go('/my_activity?tab=bids&filter=won');
+                        return;
+                      }
+
+                      // 2. Fall back to comparing normalized sellerPhone with current phone, via refId listing lookup
+                      final currentPhone = ProfileStorageHelper.normalizePhone(AuthService().currentPhone ?? '');
+                      if (notif.refId != null && notif.refId!.isNotEmpty && currentPhone.isNotEmpty) {
+                        final allListings = [
+                          ...LocalListingsStore().acceptedListings,
+                          ...LocalListingsStore().pendingListings,
+                          ...LocalListingsStore().rejectedListings,
+                        ];
+                        final listing = allListings.firstWhere(
+                          (l) => l['id']?.toString() == notif.refId.toString(),
+                          orElse: () => <String, dynamic>{},
+                        );
+                        if (listing.isNotEmpty) {
+                          final sellerPhone = ProfileStorageHelper.normalizePhone(
+                              listing['sellerPhone'] ?? listing['phone'] ?? '');
+                          if (sellerPhone.isNotEmpty && sellerPhone == currentPhone) {
+                            context.go('/my_activity?tab=listings&filter=sold');
+                            return;
+                          }
+
+                          final buyerPhone = ProfileStorageHelper.normalizePhone(
+                              listing['winnerPhone'] ?? listing['buyerPhone'] ?? '');
+                          if (buyerPhone.isNotEmpty && buyerPhone == currentPhone) {
+                            context.go('/my_activity?tab=bids&filter=won');
+                            return;
+                          }
+
+                          final forPhone = ProfileStorageHelper.normalizePhone(notif.forPhone);
+                          if (forPhone.isNotEmpty && forPhone == currentPhone && sellerPhone != currentPhone) {
+                            context.go('/my_activity?tab=bids&filter=won');
+                            return;
+                          }
+                        }
+                      }
+
+                      // Unknown -> no navigation
+                      return;
+                    }
+
+                    switch (type) {
+                      case 'bid_won':
+                        context.go('/my_activity?tab=bids&filter=won');
+                        break;
+                      case 'listing_live':
+                      case 'listing_approved':
+                      case 'listing_rejected':
+                      case 'ended':
+                        context.go('/my_activity?tab=listings');
+                        break;
+                      case 'outbid':
+                      case 'bid_lost':
+                        context.go('/my_activity?tab=bids');
+                        break;
+                      case 'subscription_active':
+                        context.go('/subscription');
+                        break;
+                      default:
+                        // unknown/missing type -> no navigation
+                        break;
                     }
                   },
                   borderRadius: BorderRadius.circular(16),

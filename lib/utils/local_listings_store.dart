@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'blob_storage.dart';
 import 'profile_storage_helper.dart';
+import '../services/client_notification_store.dart';
+import '../services/admin_notification_store.dart';
 class BidResult {
   final bool isSuccess;
   final String? errorMessage;
@@ -32,6 +34,7 @@ class LocalListingsStore extends ChangeNotifier {
   List<Map<String, dynamic>> rejectedSubscriptions = [];
 
   List<Map<String, dynamic>> pendingPayments = [];
+  List<Map<String, dynamic>> rejectedPayments = [];
 
   bool _initialized = false;
 
@@ -49,6 +52,7 @@ class LocalListingsStore extends ChangeNotifier {
     acceptedSubscriptions = _loadList(prefs, 'acceptedSubscriptions');
     rejectedSubscriptions = _loadList(prefs, 'rejectedSubscriptions');
     pendingPayments = _loadList(prefs, 'pendingPayments');
+    rejectedPayments = _loadList(prefs, 'rejectedPayments');
     
     _initialized = true;
     notifyListeners();
@@ -424,18 +428,155 @@ class LocalListingsStore extends ChangeNotifier {
   }
 
   void addPendingPayment(Map<String, dynamic> payment) {
-    pendingPayments.add(payment);
+    final paymentId = (payment['id'] ?? payment['listingId'])?.toString();
+    final idx = pendingPayments.indexWhere((p) =>
+        p['id']?.toString() == paymentId || p['listingId']?.toString() == paymentId);
+    if (idx >= 0) {
+      pendingPayments[idx] = payment;
+    } else {
+      pendingPayments.add(payment);
+    }
     _saveList('pendingPayments', pendingPayments);
+
+    if (payment['status'] != null) {
+      for (var l in acceptedListings) {
+        if (l['id']?.toString() == paymentId) {
+          l['paymentStatus'] = payment['status'];
+        }
+      }
+      _saveList('acceptedListings', acceptedListings);
+    }
     notifyListeners();
   }
 
   void updatePaymentStatus(String id, String status) {
     for (var p in pendingPayments) {
-      if (p['id'] == id) {
+      if (p['id']?.toString() == id || p['listingId']?.toString() == id) {
         p['status'] = status;
       }
     }
     _saveList('pendingPayments', pendingPayments);
+
+    for (var l in acceptedListings) {
+      if (l['id']?.toString() == id) {
+        l['paymentStatus'] = status;
+      }
+    }
+    _saveList('acceptedListings', acceptedListings);
+    notifyListeners();
+  }
+
+  void rejectPayment(Map<String, dynamic> payment) {
+    rejectedPayments.insert(0, payment);
+    _saveList('rejectedPayments', rejectedPayments);
+    notifyListeners();
+  }
+
+  void endAuction(String listingId) {
+    int index = acceptedListings.indexWhere((l) => l['id']?.toString() == listingId);
+    if (index == -1) return;
+
+    final listing = Map<String, dynamic>.from(acceptedListings[index]);
+    listing['endProcessed'] = true;
+    listing['endTime'] = DateTime.now().toIso8601String();
+
+    final allBids = acceptedBids.where((b) => (b['vehicleId'] ?? b['listingId'])?.toString() == listingId).toList();
+    int highestBid = 0;
+    String? winnerPhone;
+    String? winnerName;
+
+    for (var b in allBids) {
+      var rawAmt = b['bidAmountNum'];
+      int amt = rawAmt is int ? rawAmt : int.tryParse(rawAmt?.toString() ?? '') ?? 0;
+      if (amt > highestBid) {
+        highestBid = amt;
+        winnerPhone = b['bidderPhone'] ?? b['bidderUsername'];
+        winnerName = b['bidderName'] ?? 'Bidder';
+      }
+    }
+
+    final vehicleTitle = listing['title'] ?? 'Vehicle';
+    final sellerPhone = listing['phone'] ?? listing['sellerPhone'] ?? '';
+
+    if (highestBid > 0 && winnerPhone != null) {
+      listing['status'] = 'sold';
+      listing['winnerPhone'] = winnerPhone;
+      listing['winnerName'] = winnerName ?? 'Bidder';
+      listing['finalPrice'] = highestBid;
+      listing['currentBid'] = highestBid;
+      listing['paymentStatus'] = 'PAYMENT PENDING';
+
+      // Create or update payment record with status 'PAYMENT PENDING'
+      final existingPaymentIndex = pendingPayments.indexWhere((p) => p['id']?.toString() == listingId);
+      final paymentRecord = {
+        'id': listingId,
+        'vehicle': vehicleTitle,
+        'buyer': winnerName ?? 'Bidder',
+        'buyerPhone': winnerPhone,
+        'type': 'token',
+        'amount': highestBid,
+        'status': 'PAYMENT PENDING',
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+
+      if (existingPaymentIndex >= 0) {
+        pendingPayments[existingPaymentIndex] = paymentRecord;
+      } else {
+        pendingPayments.add(paymentRecord);
+      }
+      _saveList('pendingPayments', pendingPayments);
+
+      // Notify winner
+      ClientNotificationStore().addNotification(
+        'You won the auction for $vehicleTitle!',
+        'bid_won',
+        winnerPhone,
+        refId: listingId,
+        recipientRole: 'buyer',
+      );
+
+      // Notify seller
+      if (sellerPhone.toString().isNotEmpty) {
+        ClientNotificationStore().addNotification(
+          'Your vehicle $vehicleTitle sold for ₹$highestBid!',
+          'sold',
+          sellerPhone.toString(),
+          refId: listingId,
+          recipientRole: 'seller',
+        );
+      }
+
+      // Notify admin
+      AdminNotificationStore().addNotification(
+        'Auction ended: $vehicleTitle sold to ${winnerName ?? 'Bidder'} for ₹$highestBid',
+        'auction_ended',
+        relatedItemId: listingId,
+      );
+    } else {
+      listing['status'] = 'ended_no_bids';
+
+      // Notify seller
+      if (sellerPhone.toString().isNotEmpty) {
+        ClientNotificationStore().addNotification(
+          'Auction ended with no bids for $vehicleTitle.',
+          'ended',
+          sellerPhone.toString(),
+          refId: listingId,
+          recipientRole: 'seller',
+        );
+      }
+
+      // Notify admin
+      AdminNotificationStore().addNotification(
+        'Auction ended: $vehicleTitle ended with no bids',
+        'auction_ended',
+        relatedItemId: listingId,
+      );
+    }
+
+    acceptedListings[index] = listing;
+    _saveList('acceptedListings', acceptedListings);
     notifyListeners();
   }
 }
+

@@ -6,10 +6,12 @@ import 'providers/watchlist_provider.dart';
 import 'services/subscription_store.dart';
 
 import 'services/auth_service.dart';
+import 'services/auction_lifecycle_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AuthService().init();
+  AuctionLifecycleService(); // Starts periodic check and checks on app start
   runApp(const Wheels2DriveApp());
 }
 

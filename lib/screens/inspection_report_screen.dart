@@ -25,7 +25,19 @@ class InspectionReportScreen extends StatelessWidget {
 
     if (listing.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Inspection Report')),
+        appBar: AppBar(
+          title: const Text('Inspection Report'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/browse');
+              }
+            },
+          ),
+        ),
         body: const Center(child: Text('Listing not found')),
       );
     }

@@ -1,197 +1,327 @@
 import 'package:flutter/material.dart';
-import '../widgets/custom_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/responsive_secondary_scaffold.dart';
 import '../utils/local_listings_store.dart';
+import '../utils/profile_storage_helper.dart';
+import '../services/auth_service.dart';
+import '../widgets/listing_image.dart';
+import '../widgets/countdown_timer.dart';
+import '../utils/currency_formatter.dart';
 import '../router/app_router.dart';
+import 'dart:math' as math;
 
 class MyActivityScreen extends StatefulWidget {
-  const MyActivityScreen({super.key});
+  final String? initialTab;
+  final String? initialFilter;
+
+  const MyActivityScreen({
+    super.key,
+    this.initialTab,
+    this.initialFilter,
+  });
 
   @override
   State<MyActivityScreen> createState() => _MyActivityScreenState();
 }
 
 class _MyActivityScreenState extends State<MyActivityScreen> {
+  int _selectedTab = 0; // 0 = My Bids, 1 = My Listings
+  String _bidsFilter = 'All'; // All, Active, Won, Lost
+  String _listingsFilter = 'All'; // All, Pending, Live, Sold, Ended
+
   @override
   void initState() {
     super.initState();
-    LocalListingsStore().addListener(_onStoreChanged);
+    _applyInitialRouteState();
   }
 
   @override
-  void dispose() {
-    LocalListingsStore().removeListener(_onStoreChanged);
-    super.dispose();
-  }
-
-  void _onStoreChanged() {
-    setState(() {});
-  }
-
-  final Color navyBlue = const Color(0xFF001128);
-  final Color orange = const Color(0xFFFB7800);
-
-  int _selectedTabIndex = 0;
-
-  final List<Map<String, dynamic>> _myBids = [
-    {
-      'id': 'b1',
-      'title': '2021 Hyundai Creta SX',
-      'image': 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80',
-      'user_bid': '14,20,000',
-      'highest_bid': '14,50,000',
-      'status': 'Outbid',
-      'end_time': '02h 15m',
-      'city': 'Chennai',
-    },
-    {
-      'id': 'b2',
-      'title': '2019 Maruti Suzuki Swift ZXi',
-      'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=400&q=80',
-      'user_bid': '5,40,000',
-      'highest_bid': '5,40,000',
-      'status': 'Won',
-      'end_time': 'Ended',
-      'city': 'Delhi',
-    },
-    {
-      'id': 'b3',
-      'title': '2018 Honda City V MT',
-      'image': 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=400&q=80',
-      'user_bid': '7,10,000',
-      'highest_bid': '7,50,000',
-      'status': 'Lost',
-      'end_time': 'Ended',
-      'city': 'Pune',
-    },
-  ];
-
-  final List<Map<String, dynamic>> _myListings = [
-    {
-      'id': 'l1',
-      'title': '2020 Kia Seltos GTX+',
-      'image': 'https://images.unsplash.com/photo-1519641471654-76ce0107ad1b',
-      'highest_bid': '15,00,000',
-      'status': 'Live',
-      'city': 'Mumbai',
-    },
-    {
-      'id': 'l2',
-      'title': '2022 Mahindra Thar LX',
-      'image': 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf',
-      'highest_bid': '-',
-      'status': 'Pending Approval',
-      'city': 'Bangalore',
+  void didUpdateWidget(covariant MyActivityScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTab != widget.initialTab ||
+        oldWidget.initialFilter != widget.initialFilter) {
+      _applyInitialRouteState();
     }
-  ];
+  }
+
+  void _applyInitialRouteState() {
+    final tab = widget.initialTab?.toLowerCase();
+    final filter = widget.initialFilter?.toLowerCase();
+
+    if (filter == 'sold') {
+      _selectedTab = 1;
+      _listingsFilter = 'Sold';
+    } else if (filter == 'won') {
+      _selectedTab = 0;
+      _bidsFilter = 'Won';
+    } else if (tab == 'listings' || tab == '1') {
+      _selectedTab = 1;
+    } else if (tab == 'bids' || tab == '0') {
+      _selectedTab = 0;
+    }
+
+    if (filter != null && filter.isNotEmpty && filter != 'sold' && filter != 'won') {
+      if (_selectedTab == 0) {
+        if (filter == 'active') {
+          _bidsFilter = 'Active';
+        } else if (filter == 'lost') {
+          _bidsFilter = 'Lost';
+        } else if (filter == 'all') {
+          _bidsFilter = 'All';
+        }
+      } else {
+        if (filter == 'pending') {
+          _listingsFilter = 'Pending';
+        } else if (filter == 'live') {
+          _listingsFilter = 'Live';
+        } else if (filter == 'ended') {
+          _listingsFilter = 'Ended';
+        } else if (filter == 'all') {
+          _listingsFilter = 'All';
+        }
+      }
+    }
+  }
+
+  final Color _navy = const Color(0xFF001128);
+
+  String _s(dynamic val, [String fallback = '']) =>
+      val == null || val.toString().trim().isEmpty ? fallback : val.toString().trim();
+  int _i(dynamic val) => int.tryParse(val?.toString() ?? '0') ?? 0;
+  bool _b(dynamic v) => v == true || v == 1 || v == 'true';
+  String _formatAmt(int amt) => '₹${CurrencyFormatter.formatCurrency(amt)}';
 
   @override
   Widget build(BuildContext context) {
     return ResponsiveSecondaryScaffold(
-      currentIndex: 4,
-      backgroundColor: Colors.grey.shade50,
-      appBar: _buildAppBar(),
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildTabRow(),
-            _buildListContent(),
-            const SizedBox(height: 24),
-          ],
+      currentIndex: 4, // Profile tab index
+      fullWidth: true,
+      child: ListenableBuilder(
+        listenable: LocalListingsStore(),
+        builder: (context, _) {
+          final store = LocalListingsStore();
+          final currentPhone = ProfileStorageHelper.normalizePhone(AuthService().currentPhone ?? '');
+
+          // --- Process My Listings ---
+          final allMyListings = [
+            ...store.pendingListings,
+            ...store.acceptedListings,
+            ...store.rejectedListings
+          ].where((l) {
+            final p = ProfileStorageHelper.normalizePhone(_s(l['phone'] ?? l['sellerPhone']));
+            return p == currentPhone;
+          }).toList();
+
+          final pending = allMyListings.where((l) => _s(l['status']) == 'pending').toList();
+          final live = allMyListings.where((l) => _s(l['status']) == 'live').toList();
+          final sold = allMyListings.where((l) => _s(l['status']) == 'sold').toList();
+          final ended = allMyListings.where((l) => _s(l['status']) == 'ended' || _s(l['status']) == 'ended_no_bids').toList();
+
+          List<Map<String, dynamic>> filteredListings = [];
+          if (_listingsFilter == 'All') filteredListings = allMyListings;
+          if (_listingsFilter == 'Pending') filteredListings = pending;
+          if (_listingsFilter == 'Live') filteredListings = live;
+          if (_listingsFilter == 'Sold') filteredListings = sold;
+          if (_listingsFilter == 'Ended') filteredListings = ended;
+
+          // --- Process My Bids ---
+          final myAcceptedBids = store.acceptedBids.where((b) {
+            final bp = ProfileStorageHelper.normalizePhone(_s(b['bidderPhone'] ?? b['bidderUsername']));
+            return bp == currentPhone;
+          }).toList();
+
+          // Group by listing ID to get highest bid per listing
+          final Map<String, int> myMaxBids = {};
+          for (var b in myAcceptedBids) {
+            final lid = _s(b['listingId'] ?? b['vehicleId']);
+            final amt = _i(b['bidAmountNum']);
+            if (lid.isNotEmpty) {
+              myMaxBids[lid] = math.max(myMaxBids[lid] ?? 0, amt);
+            }
+          }
+
+          final List<Map<String, dynamic>> allMyBidsItems = [];
+          for (var lid in myMaxBids.keys) {
+            // Find the listing
+            final listing = store.acceptedListings.firstWhere((l) => _s(l['id']) == lid, orElse: () => <String, dynamic>{});
+            if (listing.isNotEmpty) {
+              allMyBidsItems.add({
+                'listing': listing,
+                'myBid': myMaxBids[lid] ?? 0,
+              });
+            }
+          }
+
+          // Helper to check payment status from listing or pendingPayments
+          String getEffectivePaymentStatus(Map<String, dynamic> listing) {
+            final lid = _s(listing['id']);
+            for (var p in store.pendingPayments) {
+              if (_s(p['id']) == lid) {
+                return _s(p['status']);
+              }
+            }
+            return _s(listing['paymentStatus']);
+          }
+
+          final activeBids = allMyBidsItems.where((item) {
+            final l = item['listing'];
+            final s = _s(l['status']).toLowerCase();
+            final isEnded = s == 'ended' || s == 'ended_no_bids' || s == 'sold' || _b(l['endProcessed']);
+            return s == 'live' && !isEnded;
+          }).toList();
+
+          final wonBids = allMyBidsItems.where((item) {
+            final l = item['listing'];
+            final s = _s(l['status']).toLowerCase();
+            final winnerPhone = ProfileStorageHelper.normalizePhone(_s(l['winnerPhone']));
+            final isEnded = s == 'ended' || s == 'ended_no_bids' || s == 'sold' || _b(l['endProcessed']);
+            final payStatus = getEffectivePaymentStatus(l);
+            final hasPayment = payStatus.isNotEmpty;
+
+            // Winner if winnerPhone matches current user, or if payment exists for this user / won state
+            final bool isWinner = winnerPhone.isNotEmpty && winnerPhone == currentPhone;
+            final highest = _i(l['finalPrice'] ?? l['currentBid'] ?? l['price']);
+            final bool isHighest = item['myBid'] >= highest && highest > 0;
+
+            return isEnded && (isWinner || isHighest || hasPayment);
+          }).toList();
+
+          final lostBids = allMyBidsItems.where((item) {
+            final l = item['listing'];
+            final s = _s(l['status']).toLowerCase();
+            final winnerPhone = ProfileStorageHelper.normalizePhone(_s(l['winnerPhone']));
+            final isEnded = s == 'ended' || s == 'ended_no_bids' || s == 'sold' || _b(l['endProcessed']);
+            final payStatus = getEffectivePaymentStatus(l);
+
+            final bool isWinner = winnerPhone.isNotEmpty && winnerPhone == currentPhone;
+            final highest = _i(l['finalPrice'] ?? l['currentBid'] ?? l['price']);
+            final bool isHighest = item['myBid'] >= highest && highest > 0;
+
+            return isEnded && !isWinner && !isHighest && payStatus.isEmpty;
+          }).toList();
+
+          List<Map<String, dynamic>> filteredBids = [];
+          if (_bidsFilter == 'All') filteredBids = allMyBidsItems;
+          if (_bidsFilter == 'Active') filteredBids = activeBids;
+          if (_bidsFilter == 'Won') filteredBids = wonBids;
+          if (_bidsFilter == 'Lost') filteredBids = lostBids;
+
+          return Padding(
+            padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 16.0 : 24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(context),
+                const SizedBox(height: 24),
+                _buildTabs(allMyBidsItems.length, allMyListings.length),
+                const SizedBox(height: 12),
+                if (_selectedTab == 0)
+                  _buildFilterChips(
+                    filters: ['All', 'Active', 'Won', 'Lost'],
+                    selected: _bidsFilter,
+                    counts: [allMyBidsItems.length, activeBids.length, wonBids.length, lostBids.length],
+                    onSelect: (val) => setState(() => _bidsFilter = val),
+                  )
+                else
+                  _buildFilterChips(
+                    filters: ['All', 'Pending', 'Live', 'Sold', 'Ended'],
+                    selected: _listingsFilter,
+                    counts: [allMyListings.length, pending.length, live.length, sold.length, ended.length],
+                    onSelect: (val) => setState(() => _listingsFilter = val),
+                  ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: _selectedTab == 0
+                      ? _buildBidsGrid(filteredBids)
+                      : _buildListingsGrid(filteredListings),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    bool isMobile = MediaQuery.of(context).size.width < 600;
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back),
+          color: _navy,
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/browse');
+            }
+          },
         ),
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      leading: IconButton(
-        icon: Icon(Icons.arrow_back, color: navyBlue),
-        onPressed: () => context.pop(),
-      ),
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset('assets/images/logo.png', height: 24, fit: BoxFit.contain),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Wheels2Drive',
-                style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const Text(
-                'My Activity',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            ],
+        const SizedBox(width: 8),
+        Text(
+          'My Activity',
+          style: TextStyle(
+            color: _navy,
+            fontSize: isMobile ? 20 : 24,
+            fontWeight: FontWeight.bold,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildTabRow() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(child: _buildTab('My Bids', _myBids.length.toString(), 0)),
-          const SizedBox(width: 8),
-          Expanded(child: _buildTab('My Listings', _myListings.length.toString(), 1)),
-        ],
-      ),
+  Widget _buildTabs(int bidsCount, int listingsCount) {
+    return Row(
+      children: [
+        _buildTabButton('My Bids', bidsCount, 0),
+        const SizedBox(width: 12),
+        _buildTabButton('My Listings', listingsCount, 1),
+      ],
     );
   }
 
-  Widget _buildTab(String title, String count, int tabIndex) {
-    bool isSelected = _selectedTabIndex == tabIndex;
-    return GestureDetector(
+  Widget _buildTabButton(String title, int count, int index) {
+    bool isSelected = _selectedTab == index;
+    return InkWell(
       onTap: () {
         setState(() {
-          _selectedTabIndex = tabIndex;
+          _selectedTab = index;
+          _bidsFilter = 'All';
+          _listingsFilter = 'All';
         });
       },
+      borderRadius: BorderRadius.circular(24),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? navyBlue : Colors.transparent,
-          border: Border.all(color: isSelected ? navyBlue : Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(20),
+          color: isSelected ? _navy : Colors.white,
+          border: Border.all(color: isSelected ? _navy : Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(
-              child: Text(
-                title,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey.shade700,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            Text(
+              title,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.black87,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: isSelected ? orange : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(10),
+                color: isSelected ? Colors.white.withValues(alpha: 0.2) : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                count,
+                '$count',
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey.shade600,
-                  fontSize: 11,
+                  color: isSelected ? Colors.white : Colors.black87,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -202,373 +332,477 @@ class _MyActivityScreenState extends State<MyActivityScreen> {
     );
   }
 
-  Widget _buildListContent() {
-    List<Widget> items = [];
-    if (_selectedTabIndex == 0) {
-      for (var bid in _myBids) {
-        items.add(Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
-          child: _buildBidCard(bid),
-        ));
-      }
-    } else {
-      for (var listing in _myListings) {
-        items.add(Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
-          child: _buildListingCard(listing),
-        ));
-      }
-    }
+  Widget _buildFilterChips({
+    required List<String> filters,
+    required String selected,
+    required List<int> counts,
+    required Function(String) onSelect,
+  }) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List.generate(filters.length, (index) {
+          String f = filters[index];
+          int c = counts[index];
+          bool isSelected = selected == f;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: FilterChip(
+              label: Text('$f ($c)'),
+              selected: isSelected,
+              onSelected: (_) => onSelect(f),
+              selectedColor: _navy.withValues(alpha: 0.1),
+              checkmarkColor: _navy,
+              labelStyle: TextStyle(
+                color: isSelected ? _navy : Colors.grey.shade700,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: isSelected ? _navy : Colors.grey.shade300,
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
 
-    return ListView(
+  Widget _buildBidsGrid(List<Map<String, dynamic>> items) {
+    if (items.isEmpty) {
+      String msg = 'No bids yet';
+      if (_bidsFilter == 'Active') msg = 'No active bids';
+      if (_bidsFilter == 'Won') msg = 'No won auctions yet';
+      if (_bidsFilter == 'Lost') msg = 'No lost auctions';
+      return SizedBox(
+        height: 200,
+        child: Center(
+          child: Text(msg, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+        ),
+      );
+    }
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      children: items,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 400,
+        mainAxisExtent: 380, // Approximate height for bids card
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        return _buildBidCard(items[index]);
+      },
     );
   }
 
-  Widget _buildBidCard(Map<String, dynamic> bid) {
-    String currentStatus = bid['status'];
-    for (var p in LocalListingsStore().pendingPayments) {
-      if (p['id'] == bid['id']) {
-        currentStatus = p['status'];
+  Widget _buildListingsGrid(List<Map<String, dynamic>> items) {
+    if (items.isEmpty) {
+      String msg = 'No listings yet';
+      if (_listingsFilter == 'Pending') msg = 'No pending listings';
+      if (_listingsFilter == 'Live') msg = 'No live listings';
+      if (_listingsFilter == 'Sold') msg = 'No sold listings';
+      if (_listingsFilter == 'Ended') msg = 'No ended listings';
+      return SizedBox(
+        height: 200,
+        child: Center(
+          child: Text(msg, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+        ),
+      );
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 400,
+        mainAxisExtent: 380, // Approximate height for listings card
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        return _buildListingCard(items[index]);
+      },
+    );
+  }
+
+  Widget _buildBidCard(Map<String, dynamic> item) {
+    final listing = item['listing'];
+    final myBid = item['myBid'];
+    final lid = _s(listing['id']);
+    final status = _s(listing['status']).toLowerCase();
+    final highestBid = _i(listing['finalPrice'] ?? listing['currentBid'] ?? listing['price']);
+    
+    // Read payment state from existing payment store keyed by listing id
+    final store = LocalListingsStore();
+    String paymentStatus = _s(listing['paymentStatus']);
+    for (var p in store.pendingPayments) {
+      if (_s(p['id']) == lid) {
+        paymentStatus = _s(p['status']);
+        break;
       }
     }
 
-    Color statusColor;
-    switch (currentStatus) {
-      case 'TOKEN PENDING VERIFICATION':
-      case 'BALANCE PENDING VERIFICATION':
+    final currentPhone = ProfileStorageHelper.normalizePhone(AuthService().currentPhone ?? '');
+    final winnerPhone = ProfileStorageHelper.normalizePhone(_s(listing['winnerPhone']));
+    final endTime = _s(listing['endTime']);
+    final title = _s(listing['title'], 'Untitled vehicle');
+    final loc = _s(listing['location'] ?? listing['locationDisplay'], 'Location not provided');
+
+    String semanticStatus = 'UNKNOWN';
+    Color statusColor = Colors.grey;
+
+    bool isClosed = status == 'ended' || status == 'ended_no_bids' || status == 'sold' || _b(listing['endProcessed']);
+    bool isLive = status == 'live' && !isClosed;
+    bool isHighest = myBid >= highestBid && highestBid > 0;
+    bool isWinner = (winnerPhone.isNotEmpty && winnerPhone == currentPhone) || (isClosed && isHighest) || (isClosed && paymentStatus.isNotEmpty);
+
+    if (isLive) {
+      semanticStatus = isHighest ? 'WINNING' : 'OUTBID';
+      statusColor = isHighest ? Colors.green : Colors.red;
+    } else if (isClosed) {
+      if (isWinner) {
+        semanticStatus = 'WON';
         statusColor = Colors.orange;
-        break;
-      case 'TOKEN CONFIRMED':
-        statusColor = Colors.blue;
-        break;
-      case 'PAID':
-        statusColor = Colors.green;
-        break;
-      case 'Winning':
-        statusColor = Colors.green;
-        break;
-      case 'Won':
-        statusColor = const Color(0xFFF59E0B);
-        break;
-      case 'PAYMENT PENDING':
-        statusColor = Colors.blue;
-        break;
-      case 'Outbid':
-      case 'Lost':
-        statusColor = Colors.red;
-        break;
-      default:
+      } else {
+        semanticStatus = 'LOST';
         statusColor = Colors.grey;
+      }
     }
 
-    return GestureDetector(
-      onTap: () => openVehicleDetail(context, bid['vehicleId']?.toString() ?? ''),
-      child: Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Stack(
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: CustomNetworkImage(
-                  imageUrl: bid['image'],
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                child: ListingImage(
+                  listing: listing,
                   height: 160,
                   width: double.infinity,
                   fit: BoxFit.cover,
                 ),
               ),
               Positioned(
-                top: 12,
-                left: 12,
+                top: 8,
+                left: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: statusColor,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (bid['status'] == 'Won') ...[
-                        const Icon(Icons.emoji_events, size: 14, color: Colors.white),
-                        const SizedBox(width: 4),
-                      ],
-                      Text(
-                        bid['status'].toUpperCase(),
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 12,
-                right: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(16)),
                   child: Text(
-                    currentStatus == 'Won' || currentStatus == 'PAYMENT PENDING' || currentStatus == 'TOKEN PENDING VERIFICATION' || currentStatus == 'TOKEN CONFIRMED' || currentStatus == 'BALANCE PENDING VERIFICATION' || currentStatus == 'PAID' ? 'Auction Ended' : (bid['end_time'] == 'Ended' ? 'Ended' : 'Ends in ${bid['end_time']}'),
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    semanticStatus,
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
+              if (isLive && endTime.isNotEmpty)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: CountdownTimer(
+                      endTime: DateTime.tryParse(endTime) ?? DateTime.now(),
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              if (isClosed)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text('Auction Ended', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ),
             ],
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  bid['title'],
-                  style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
                 Row(
                   children: [
                     const Icon(Icons.location_on, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text(
-                      bid['city'] ?? 'Unknown Location',
-                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Your Bid', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Text('₹${bid['user_bid']}', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 16)),
-                      ],
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text('Highest Bid', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Text('₹${bid['highest_bid']}', style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16)),
-                      ],
-                    ),
-                  ],
-                ),
-                if (currentStatus == 'Won' || currentStatus == 'PAYMENT PENDING' || currentStatus == 'TOKEN PENDING VERIFICATION' || currentStatus == 'TOKEN CONFIRMED' || currentStatus == 'BALANCE PENDING VERIFICATION' || currentStatus == 'PAID') ...[
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: (currentStatus == 'PAYMENT PENDING' || currentStatus == 'TOKEN PENDING VERIFICATION' || currentStatus == 'BALANCE PENDING VERIFICATION' || currentStatus == 'PAID') ? null : () async {
-                        final amountStr = bid['user_bid'].toString().replaceAll(',', '');
-                        final int amount = int.tryParse(amountStr) ?? 0;
-                        
-                        String initialStep = 'token';
-                        if (currentStatus == 'TOKEN CONFIRMED') initialStep = 'balance';
-
-                        final result = await context.push(
-                          '/payment',
-                          extra: {
-                            'id': bid['id'],
-                            'title': bid['title'],
-                            'image': bid['image'],
-                            'amount': amount,
-                            'seller': bid['seller'] ?? 'Verified Seller',
-                            'initialStep': initialStep,
-                          },
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: (currentStatus == 'PAYMENT PENDING' || currentStatus == 'TOKEN PENDING VERIFICATION' || currentStatus == 'BALANCE PENDING VERIFICATION' || currentStatus == 'PAID') ? Colors.grey : orange,
-                        disabledBackgroundColor: Colors.grey,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: Text(
-                        currentStatus == 'TOKEN PENDING VERIFICATION' ? 'Token Verification Pending' :
-                        currentStatus == 'BALANCE PENDING VERIFICATION' ? 'Balance Verification Pending' :
-                        currentStatus == 'PAID' ? 'Payment Complete' : 
-                        currentStatus == 'TOKEN CONFIRMED' ? 'Pay Balance' : 'Pay Token', 
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-      ),
-    );
-  }
-
-  Widget _buildListingCard(Map<String, dynamic> listing) {
-    Color statusColor;
-    switch (listing['status']) {
-      case 'Live':
-        statusColor = Colors.green;
-        break;
-      case 'Pending Approval':
-        statusColor = orange;
-        break;
-      case 'Sold':
-        statusColor = navyBlue;
-        break;
-      case 'Rejected':
-        statusColor = Colors.red;
-        break;
-      default:
-        statusColor = Colors.grey;
-    }
-
-    return GestureDetector(
-      onTap: () => openVehicleDetail(context, listing['id']?.toString() ?? ''),
-      child: Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: CustomNetworkImage(
-                  imageUrl: listing['image'],
-                  height: 160,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              Positioned(
-                top: 12,
-                left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: statusColor,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    listing['status'].toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  listing['title'],
-                  style: TextStyle(color: navyBlue, fontSize: 16, fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      listing['city'] ?? 'Unknown Location',
-                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Current Highest Bid', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Text(
-                          listing['highest_bid'] == '-' ? '-' : '₹${listing['highest_bid']}',
-                          style: TextStyle(color: navyBlue, fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                      ],
-                    ),
+                    Expanded(child: Text(loc, style: const TextStyle(color: Colors.grey, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          openVehicleDetail(context, listing['id']?.toString() ?? '');
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: navyBlue,
-                          side: BorderSide(color: navyBlue),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: const Text('View Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Your Bid', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(_formatAmt(myBid), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ],
                       ),
                     ),
-                    if (listing['status'] == 'Pending Approval' || listing['status'] == 'Rejected') ...[
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final result = await context.push('/post_vehicle', extra: {
-                              'isEditMode': true,
-                              'initialData': listing,
-                            });
-                            if (result == true) {
-                              setState(() {
-                                listing['title'] = listing['title'] + ' (Updated)';
-                              });
-                            }
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: navyBlue,
-                            side: BorderSide(color: navyBlue),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Text('Edit Listing', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(isClosed ? 'Final Price' : 'Highest Bid', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(_formatAmt(highestBid), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ],
                       ),
-                    ],
+                    ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                if (semanticStatus == 'WON')
+                  _buildPaymentAction(listing, paymentStatus)
+                else if (semanticStatus == 'LOST')
+                  // Lost -> no button, show final price (already displayed above)
+                  const SizedBox(height: 36)
+                else
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: _navy),
+                      onPressed: () => openVehicleDetail(context, lid),
+                      child: const Text('View Vehicle', style: TextStyle(color: Colors.white)),
+                    ),
+                  ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPaymentAction(Map<String, dynamic> listing, String paymentStatus) {
+    final s = paymentStatus.toUpperCase().trim();
+    if (s.isEmpty || s == 'PAYMENT PENDING') {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+          onPressed: () => _openPayment(listing, step: 'token'),
+          child: const Text('Pay Token', style: TextStyle(color: Colors.white)),
+        ),
+      );
+    } else if (s == 'TOKEN CONFIRMED') {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+          onPressed: () => _openPayment(listing, step: 'balance'),
+          child: const Text('Pay Balance', style: TextStyle(color: Colors.white)),
+        ),
+      );
+    } else if (s == 'PAID') {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.green.shade300),
+        ),
+        alignment: Alignment.center,
+        child: const Text(
+          'PAID',
+          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
+        ),
+      );
+    } else {
+      // Handles TOKEN PENDING VERIFICATION, BALANCE PENDING VERIFICATION, etc.
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          paymentStatus,
+          style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold, fontSize: 12),
+        ),
+      );
+    }
+  }
+
+  void _openPayment(Map<String, dynamic> listing, {String step = 'token'}) {
+    context.push(
+      '/payment',
+      extra: {
+        'id': _s(listing['id']),
+        'title': _s(listing['title'], 'Untitled vehicle'),
+        'amount': _i(listing['finalPrice'] ?? listing['currentBid'] ?? listing['price']),
+        'seller': _s(listing['sellerPhone'] ?? listing['phone']),
+        'initialStep': step,
+      },
+    );
+  }
+
+  Widget _buildListingCard(Map<String, dynamic> item) {
+    final status = _s(item['status']);
+    final title = _s(item['title'], 'Untitled vehicle');
+    final loc = _s(item['location'] ?? item['locationDisplay'], 'Location not provided');
+    final highestBid = _i(item['currentBid']);
+    final price = _i(item['price']);
+    final bidsPlaced = _i(item['bidsPlaced']);
+    final endTime = _s(item['endTime']);
+
+    String semanticStatus = 'UNKNOWN';
+    Color statusColor = Colors.grey;
+    if (status == 'pending') {
+      semanticStatus = 'PENDING APPROVAL';
+      statusColor = Colors.orange;
+    } else if (status == 'live') {
+      semanticStatus = 'LIVE';
+      statusColor = Colors.green;
+    } else if (status == 'sold') {
+      semanticStatus = 'SOLD';
+      statusColor = _navy;
+    } else if (status == 'ended' || status == 'ended_no_bids') {
+      semanticStatus = 'ENDED';
+      statusColor = Colors.grey;
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                child: ListingImage(
+                  listing: item,
+                  height: 160,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    semanticStatus,
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              if (status == 'live' && endTime.isNotEmpty)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: CountdownTimer(
+                      endTime: DateTime.tryParse(endTime) ?? DateTime.now(),
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Expanded(child: Text(loc, style: const TextStyle(color: Colors.grey, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (status == 'pending')
+                  const Text('Awaiting approval', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))
+                else if (status == 'sold')
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Final Price', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      Text(_formatAmt(_i(item['finalPrice'] ?? (highestBid > 0 ? highestBid : price))), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  )
+                else if (status == 'ended' || status == 'ended_no_bids')
+                  bidsPlaced == 0
+                      ? const Text('Ended - no bids', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Final Price', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            Text(_formatAmt(_i(item['finalPrice'] ?? (highestBid > 0 ? highestBid : price))), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          ],
+                        )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Current Highest Bid', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      Text(highestBid > 0 ? _formatAmt(highestBid) : '-', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: status == 'pending' ? Colors.white : _navy,
+                      foregroundColor: status == 'pending' ? _navy : Colors.white,
+                      side: status == 'pending' ? BorderSide(color: _navy) : null,
+                    ),
+                    onPressed: () {
+                      if (status == 'pending') {
+                        context.push('/post_vehicle', extra: {'listingId': _s(item['id'])});
+                      } else {
+                        context.push('/listing-pdf/${_s(item['id'])}');
+                      }
+                    },
+                    child: Text(status == 'pending' ? 'Edit Listing' : 'View Details'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
