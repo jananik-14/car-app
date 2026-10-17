@@ -88,69 +88,68 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget _buildHeader() {
     const lightBlueGrey = Color(0xFFEEF1F7);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 12,
         children: [
-          Expanded(
-            child: Row(
-              children: [
-                const Expanded(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Notifications',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+              if (ClientNotificationStore().unreadCountFor(AuthService().currentPhone ?? '') > 0) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Text(
-                    'Notifications',
-                    style: TextStyle(
-                      fontSize: 24,
+                    '${ClientNotificationStore().unreadCountFor(AuthService().currentPhone ?? '')}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                      height: 1.0,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (ClientNotificationStore().unreadCountFor(AuthService().currentPhone ?? '') > 0) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(
-                      color: AppColors.secondaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      '${ClientNotificationStore().unreadCountFor(AuthService().currentPhone ?? '')}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        height: 1.0,
-                      ),
-                    ),
-                  ),
-                ],
               ],
-            ),
+            ],
           ),
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               GestureDetector(
                 onTap: () {
                   ClientNotificationStore().markAllAsReadFor(AuthService().currentPhone ?? '');
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: lightBlueGrey,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.done_all, size: 16, color: AppColors.primary),
+                      Icon(Icons.done_all, size: 14, color: AppColors.primary),
                       SizedBox(width: 4),
                       Text(
-                        'Mark all read',
+                        'Mark read',
                         style: TextStyle(
                           color: AppColors.primary,
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -164,20 +163,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ClientNotificationStore().clearAllFor(AuthService().currentPhone ?? '');
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: lightBlueGrey,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.clear_all, size: 16, color: AppColors.primary),
+                      Icon(Icons.clear_all, size: 14, color: AppColors.primary),
                       SizedBox(width: 4),
                       Text(
-                        'Clear all',
+                        'Clear',
                         style: TextStyle(
                           color: AppColors.primary,
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

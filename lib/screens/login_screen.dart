@@ -148,14 +148,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _getOtp,
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      runSpacing: 6,
                       children: [
                         _buildFeatureItem(Icons.flash_on, 'Instant Access'),
-                        _buildDot(),
-                        _buildFeatureItem(Icons.shield, 'Zero Spam'),
-                        _buildDot(),
-                        _buildFeatureItem(Icons.gavel, 'Verified Auctions'),
                       ],
                     ),
                   ],
@@ -208,6 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildFeatureItem(IconData icon, String label) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 14, color: AppColors.secondaryContainer),
         const SizedBox(width: 4),
@@ -220,18 +219,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildDot() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      width: 4,
-      height: 4,
-      decoration: const BoxDecoration(
-        color: AppColors.outlineVariant,
-        shape: BoxShape.circle,
-      ),
     );
   }
 }

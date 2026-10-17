@@ -15,8 +15,9 @@ import '../utils/profile_storage_helper.dart';
 class PostVehicleFormScreen extends StatefulWidget {
   final bool isEditMode;
   final Map<String, dynamic>? initialData;
+  final int initialStep;
   const PostVehicleFormScreen(
-      {super.key, this.isEditMode = false, this.initialData});
+      {super.key, this.isEditMode = false, this.initialData, this.initialStep = 1});
 
   @override
   State<PostVehicleFormScreen> createState() => _PostVehicleFormScreenState();
@@ -128,6 +129,7 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
   @override
   void initState() {
     super.initState();
+    _currentStep = widget.initialStep;
     if (widget.initialData != null) {
       final d = widget.initialData!;
       _selectedVehicleType = d['vehicleType'];
@@ -270,8 +272,9 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         'durationHours': durationHrs,
         'status': widget.isEditMode ? widget.initialData!['status'] : 'pending',
         'endProcessed': widget.isEditMode ? widget.initialData!['endProcessed'] : false,
+        'createdAt': widget.isEditMode ? (widget.initialData!['createdAt'] ?? DateTime.now().toIso8601String()) : DateTime.now().toIso8601String(),
         'location': locDisplay,
-        'timeAgo': 'Just now',
+        'timeAgo': 'Recently',
         'type': sellerType,
         'rcStatus': 'Clear',
         'inspection': '4.5 / 5.0',
@@ -489,12 +492,16 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                           fontSize: 12)),
                 ],
               ),
-              Text(
-                stepTitle,
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
+              Flexible(
+                child: Text(
+                  stepTitle,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
@@ -643,19 +650,26 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Fuel Type',
+            Flexible(
+              child: Text(
+                'Fuel Type',
                 style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: navyBlue)),
+                    color: navyBlue),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
             const Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text('Select one',
                     style: TextStyle(color: Colors.grey, fontSize: 12)),
                 SizedBox(width: 4),
                 Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.grey),
               ],
-            )
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -1221,9 +1235,12 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                                   fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(width: 8),
-                        Text(_registrationController.text.trim().isEmpty ? 'Not entered' : _registrationController.text.trim(),
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, color: navyBlue)),
+                        Flexible(
+                          child: Text(_registrationController.text.trim().isEmpty ? 'Not entered' : _registrationController.text.trim(),
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, color: navyBlue)),
+                        ),
                         if (_registrationController.text.trim().isNotEmpty) ...[
                            const SizedBox(width: 8),
                            Icon(Icons.check_circle,
@@ -1249,15 +1266,21 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-               children: [
-                 Text('Total Kilometers Driven',
-                     style: TextStyle(
-                         fontSize: 16,
-                         fontWeight: FontWeight.bold,
-                         color: navyBlue)),
-                 const Text(' *', style: TextStyle(color: Colors.red)),
-               ],
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text('Total Kilometers Driven',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: navyBlue),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  const Text(' *', style: TextStyle(color: Colors.red)),
+                ],
+              ),
             ),
           ],
         ),
@@ -1324,11 +1347,14 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         // Number of Owners
         Row(
           children: [
-            Text('Number of Previous Owners',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: navyBlue)),
+            Flexible(
+              child: Text('Number of Previous Owners',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: navyBlue),
+                  overflow: TextOverflow.ellipsis),
+            ),
             const Text(' *', style: TextStyle(color: Colors.red)),
           ],
         ),
@@ -1371,10 +1397,13 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         const SizedBox(height: 16),
         Row(
           children: [
-             Text('Insurance Coverage Type',
-                 style: TextStyle(
-                     fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
-             const Text(' *', style: TextStyle(color: Colors.red)),
+            Flexible(
+              child: Text('Insurance Coverage Type',
+                  style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            const Text(' *', style: TextStyle(color: Colors.red)),
           ],
         ),
         const SizedBox(height: 8),
@@ -1422,10 +1451,13 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         const SizedBox(height: 16),
         Row(
           children: [
-             Text('Insurance Till (Expiry Date)',
-                 style: TextStyle(
-                     fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue)),
-             const Text(' *', style: TextStyle(color: Colors.red)),
+            Flexible(
+              child: Text('Insurance Till (Expiry Date)',
+                  style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600, color: navyBlue),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            const Text(' *', style: TextStyle(color: Colors.red)),
           ],
         ),
         const SizedBox(height: 8),
@@ -2216,16 +2248,11 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         const SizedBox(height: 32),
 
         // Expected Selling Price Section
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Expected Selling Price',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: navyBlue)),
-          ],
-        ),
+        Text('Expected Selling Price',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: navyBlue)),
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
@@ -2288,20 +2315,42 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         const SizedBox(height: 12),
 
         // Auction Duration Section
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Auction Duration',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: navyBlue)),
-            Text('Live countdown starts post-approval',
-                style: TextStyle(
-                    color: Colors.blue[700],
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold)),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 600) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Auction Duration',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: navyBlue)),
+                  const SizedBox(height: 4),
+                  Text('Live countdown starts post-approval',
+                      style: TextStyle(
+                          color: Colors.blue[700],
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
+                ],
+              );
+            }
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Auction Duration',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: navyBlue)),
+                Text('Live countdown starts post-approval',
+                    style: TextStyle(
+                        color: Colors.blue[700],
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold)),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 16),
         Row(
@@ -2358,16 +2407,22 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  _isSubmitting
-                      ? 'Saving...'
-                      : (widget.isEditMode
-                          ? 'Update Listing'
-                          : 'Submit for Admin Verification'),
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _isSubmitting
+                          ? 'Saving...'
+                          : (widget.isEditMode
+                              ? 'Update Listing'
+                              : 'Submit for Admin Verification'),
+                      maxLines: 1,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 if (_isSubmitting)
@@ -2410,8 +2465,8 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         });
       },
       child: Container(
-        height: 100,
-        padding: const EdgeInsets.all(12),
+        constraints: const BoxConstraints(minHeight: 84),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? navyBlue.withValues(alpha: 0.05) : Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -2422,10 +2477,11 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             if (badge != null)
               Container(
-                margin: const EdgeInsets.only(bottom: 8),
+                margin: const EdgeInsets.only(bottom: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: orange.withValues(alpha: 0.1),
@@ -2440,20 +2496,28 @@ class _PostVehicleFormScreenState extends State<PostVehicleFormScreen> {
                   ),
                 ),
               ),
-            Text(
-              duration,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: navyBlue,
-                fontSize: 14,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                duration,
+                maxLines: 1,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: navyBlue,
+                  fontSize: 14,
+                ),
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              subLabel,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 10,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                subLabel,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 10,
+                ),
               ),
             ),
           ],

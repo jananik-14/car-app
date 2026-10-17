@@ -90,7 +90,26 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('Profile', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary)),
+          Expanded(
+            child: Row(
+              children: [
+                if (Navigator.canPop(context)) ...[
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: AppColors.primary),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                const Flexible(
+                  child: Text(
+                    'Subscription Plans',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
           Theme(
             data: Theme.of(context).copyWith(
               splashColor: const Color(0xFFFB7800).withValues(alpha: 0.1),
@@ -298,10 +317,9 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
           if (isBestValue) Container(height: 4, color: mainColor),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
@@ -334,11 +352,11 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.end,
                   children: [
-                    Text(_formatAmount(plan.price), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: AppColors.primary)),
+                    Text(_formatAmount(plan.price), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: AppColors.primary)),
+                    const SizedBox(width: 4),
                     Text('/${plan.name.toLowerCase()}', style: const TextStyle(fontSize: 14, color: AppColors.outline, fontWeight: FontWeight.w500)),
                   ],
                 ),
@@ -349,8 +367,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                   ),
                 const SizedBox(height: 12),
                 _buildChecklist(plan.features, mainColor),
-                const Spacer(),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -375,7 +392,6 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                 ),
               ],
             ),
-          ),
           ),
         ],
       ),

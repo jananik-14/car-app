@@ -24,6 +24,7 @@ import '../screens/email_screen.dart';
 import '../screens/debug_menu_screen.dart';
 import '../screens/my_activity_screen.dart';
 import '../screens/profile_edit_screen.dart';
+import '../screens/profile_screen.dart';
 import '../screens/help_support_screen.dart';
 import '../screens/payment_screen.dart';
 import '../screens/subscription_checkout_screen.dart';
@@ -215,6 +216,10 @@ class AppRouter {
             initialFilter: filter?.toString(),
           );
         },
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
         path: '/profile_edit',

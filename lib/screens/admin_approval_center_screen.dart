@@ -7,18 +7,24 @@
 // PATCH /api/admin/subscriptions/:id (approve/reject)
 
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import '../widgets/admin_navigation_drawer.dart';
 import '../widgets/responsive_nav_scaffold.dart';
 import '../widgets/admin_app_bar.dart';
+import '../widgets/listing_image.dart';
+import '../services/listing_document_service.dart';
+import '../services/share_service.dart';
 import '../utils/local_listings_store.dart';
 import '../utils/blob_storage.dart';
 import '../services/subscription_store.dart';
 import '../services/client_notification_store.dart';
-import '../config/app_config.dart';
+import '../services/admin_clients_store.dart';
+import '../config/subscription_plans.dart';
+import '../utils/profile_storage_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum MainCategory { vehiclePosts, bidding, subscriptions, payments }
 
@@ -39,7 +45,7 @@ class AdminApprovalCenterScreen extends StatefulWidget {
 class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   String _s(dynamic v, [String f = '']) => v == null ? f : v.toString();
   int _i(dynamic v, [int f = 0]) => v is int ? v : (int.tryParse('$v') ?? f);
-  bool _b(dynamic v, [bool f = false]) => v == true || v == 1 || v == 'true';
+  bool _b(dynamic v, [bool f = false]) => v == null ? f : (v == true || v == 1 || v == 'true');
   bool _isProcessing = false;
 
   late MainCategory _selectedCategory;
@@ -50,23 +56,93 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   final Color _green = const Color(0xFF22C55E);
   final Color _red = const Color(0xFFEF4444);
 
+  final Map<String, String> _userCities = {};
+  final Map<String, String> _userNames = {};
+  final Map<String, DateTime> _activeClientExpiries = {};
+
+  final Set<String> _viewedListingPdf = {};
+  final Set<String> _viewedInspection = {};
+  final Map<String, Uint8List?> _inspectionBytesCache = {};
+
+  Future<void> _loadUserProfiles() async {
+    final allSubs = [
+      ...LocalListingsStore().pendingSubscriptions,
+      ...LocalListingsStore().acceptedSubscriptions,
+      ...LocalListingsStore().rejectedSubscriptions,
+    ];
+    final prefs = await SharedPreferences.getInstance();
+    for (var sub in allSubs) {
+      final phone = sub['phone']?.toString() ?? '';
+      if (phone.isNotEmpty) {
+        final normalized = ProfileStorageHelper.normalizePhone(phone);
+        if (!_userCities.containsKey(phone)) {
+          final city = prefs.getString('user_city_$normalized') ??
+              prefs.getString('user_city_$phone');
+          final name = prefs.getString('user_name_$normalized') ??
+              prefs.getString('user_name_$phone');
+          if (city != null && city.isNotEmpty) _userCities[phone] = city;
+          if (name != null && name.isNotEmpty) _userNames[phone] = name;
+        }
+
+        final status = prefs.getString('sub_status_$normalized');
+        final endStr = prefs.getString('sub_end_$normalized');
+        if (status == 'active' && endStr != null) {
+          try {
+            final end = DateTime.parse(endStr);
+            if (end.isAfter(DateTime.now())) {
+              _activeClientExpiries[phone] = end;
+              _activeClientExpiries[normalized] = end;
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
+    for (var acc in LocalListingsStore().acceptedSubscriptions) {
+      final phone = acc['phone']?.toString() ?? '';
+      final endStr = acc['endDate']?.toString() ?? acc['expiryDate']?.toString();
+      if (phone.isNotEmpty && endStr != null) {
+        try {
+          final end = DateTime.parse(endStr);
+          if (end.isAfter(DateTime.now())) {
+            _activeClientExpiries[phone] = end;
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (mounted) setState(() {});
+  }
+
   String _formatPrice(dynamic amount) {
-    if (amount == null) return 'N/A';
+    if (amount == null) return '₹0';
     if (amount is num) {
       return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(amount);
     }
+    final str = amount.toString().replaceAll(RegExp(r'[^0-9]'), '');
+    final numVal = int.tryParse(str);
+    if (numVal != null) {
+      return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(numVal);
+    }
     return amount.toString();
   }
-
-  // --- Dummy Data ---
-
-
-
 
   @override
   void initState() {
     super.initState();
     _selectedCategory = widget.initialCategory ?? MainCategory.vehiclePosts;
+    LocalListingsStore().addListener(_onStoreUpdate);
+    _loadUserProfiles();
+  }
+
+  void _onStoreUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    LocalListingsStore().removeListener(_onStoreUpdate);
+    super.dispose();
   }
 
   int get totalPendingCount =>
@@ -289,7 +365,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               'endProcessed': false,
               'ref':
                   'V-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-              'time': 'Approved just now',
+              'time': 'Approved recently',
             });
             final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
             ClientNotificationStore().addNotification(
@@ -315,7 +391,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               'endProcessed': false,
               'ref':
                   'V-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-              'time': 'Approved just now',
+              'time': 'Approved recently',
             });
             final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
             ClientNotificationStore().addNotification(
@@ -337,7 +413,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               'bidderName': item['bidderName'],
               'ref':
                   'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-              'time': 'Accepted just now',
+              'time': 'Accepted recently',
             });
             final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
             ClientNotificationStore().addNotification(
@@ -354,7 +430,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               ...item,
               'ref':
                   'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-              'time': 'Accepted just now',
+              'time': 'Accepted recently',
             });
             final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
             ClientNotificationStore().addNotification(
@@ -369,46 +445,41 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
           if (idx != -1) {
             final item = LocalListingsStore().pendingSubscriptions.removeAt(idx);
-            if (item['phone'] != null && item['planId'] != null) {
-              SubscriptionStore().activate(item['phone'], item['planId']);
+            final phone = _s(item['phone']);
+            final planId = _s(item['planId'], 'yearly');
+            if (phone.isNotEmpty) {
+              SubscriptionStore().activate(phone, planId);
             }
+            final plan = SubscriptionPlans.getPlanById(planId);
+            final planName = plan?.name ?? _s(item['tier'], 'Subscription');
+            final now = DateTime.now();
+            final durationDays = plan?.durationDays ?? 365;
+            final endDate = now.add(Duration(days: durationDays));
             LocalListingsStore().acceptedSubscriptions.insert(0, {
-              'id': item['id'],
-              'businessName': item['businessName'],
-              'tier': item['tier'],
-              'price': item['price'],
-              'id1Label': item['id1Label'],
-              'id1Value': item['id1Value'],
-              'ref':
-                  'SUB-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-              'time': 'Approved just now',
-            });
-            final requesterPhone = item['phone'] ?? '';
-            ClientNotificationStore().addNotification(
-              'Your ${item['tier']} subscription is now active!',
-              'subscription_active',
-              requesterPhone,
-              refId: id,
-            );
-          } else {
-            final item = LocalListingsStore().pendingSubscriptions
-                .firstWhere((e) => e['id'] == id);
-            if (item['phone'] != null && item['planId'] != null) {
-              SubscriptionStore().activate(item['phone'], item['planId']);
-            }
-            LocalListingsStore().acceptSubscription({
               ...item,
-              'ref':
-                  'SUB-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-              'time': 'Approved just now',
+              'status': 'Approved',
+              'startDate': now.toIso8601String(),
+              'endDate': endDate.toIso8601String(),
+              'approvedAt': now.toIso8601String(),
+              'ref': 'SUB-${now.millisecondsSinceEpoch.toString().substring(8)}',
+              'time': DateFormat('dd MMM yyyy, hh:mm a').format(now),
+              'auditLog': 'Approved by admin on ${DateFormat('dd MMM yyyy, hh:mm a').format(now)}',
             });
-            final requesterPhone = item['phone'] ?? '';
-            ClientNotificationStore().addNotification(
-              'Your ${item['tier']} subscription is now active! Valid until 1 Year.',
-              'subscription_active',
-              requesterPhone,
-              refId: id,
-            );
+            if (phone.isNotEmpty) {
+              ClientNotificationStore().addNotification(
+                'Your $planName subscription is now active',
+                'subscription_active',
+                phone,
+                refId: id,
+              );
+            }
+            final clientName = _s(item['businessName'] ?? item['clientName'], 'Client');
+            AdminClientsStore().history.insert(0, {
+              'name': clientName,
+              'action': 'subscription approved ($planName)',
+              'time': DateFormat('dd MMM yyyy, hh:mm a').format(now),
+              'type': 'Success',
+            });
           }
         }
       });
@@ -445,37 +516,59 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   void _handleReject(String id, MainCategory category) {
     if (_isProcessing) return;
     TextEditingController reasonController = TextEditingController();
+    String? validationError;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject Item'),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(
-            hintText: 'Reason for rejection (optional)',
-            border: OutlineInputBorder(),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Reject Item'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: reasonController,
+                decoration: InputDecoration(
+                  hintText: 'Reason for rejection (min 5 characters)',
+                  errorText: validationError,
+                  border: const OutlineInputBorder(),
+                ),
+                maxLines: 3,
+                onChanged: (_) {
+                  if (validationError != null) {
+                    setDialogState(() => validationError = null);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The seller will be notified with this reason.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
           ),
-          maxLines: 2,
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: _red, foregroundColor: Colors.white),
+              onPressed: () {
+                final reason = reasonController.text.trim();
+                if (reason.length < 5) {
+                  setDialogState(() {
+                    validationError = 'Reason must be at least 5 characters';
+                  });
+                  return;
+                }
+                Navigator.pop(ctx);
+                _processRejection(id, category, reason);
+              },
+              child: const Text('Reject'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: _red, foregroundColor: Colors.white),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _processRejection(
-                  id,
-                  category,
-                  reasonController.text.isEmpty
-                      ? 'Admin rejected'
-                      : reasonController.text);
-            },
-            child: const Text('Reject'),
-          ),
-        ],
       ),
     );
   }
@@ -516,7 +609,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           'status': 'PAYMENT REJECTED',
           'rejectionReason': reason,
           'reason': reason,
-          'time': 'Declined just now',
+          'time': 'Declined recently',
         });
 
         if (buyerPhone.isNotEmpty) {
@@ -558,7 +651,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               'status': 'rejected',
               'rejectReason': reason,
               'reason': reason,
-              'time': 'Declined just now',
+              'time': 'Declined recently',
             });
             final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
             ClientNotificationStore().addNotification(
@@ -577,7 +670,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               'status': 'rejected',
               'rejectReason': reason,
               'reason': reason,
-              'time': 'Declined just now',
+              'time': 'Declined recently',
             });
             final sellerPhone = item['phone'] ?? item['sellerPhone'] ?? '';
             ClientNotificationStore().addNotification(
@@ -598,7 +691,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               'price': item['bidAmount'],
               'bidderName': item['bidderName'],
               'reason': reason,
-              'time': 'Declined just now',
+              'time': 'Declined recently',
             });
             final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
             ClientNotificationStore().addNotification(
@@ -614,7 +707,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
             LocalListingsStore().rejectBid({
               ...item,
               'reason': reason,
-              'time': 'Declined just now',
+              'time': 'Declined recently',
             });
             final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
             ClientNotificationStore().addNotification(
@@ -629,43 +722,34 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
           if (idx != -1) {
             final item = LocalListingsStore().pendingSubscriptions.removeAt(idx);
-            if (item['phone'] != null) {
-              SubscriptionStore().reject(item['phone']);
+            final phone = _s(item['phone']);
+            if (phone.isNotEmpty) {
+              SubscriptionStore().reject(phone);
             }
+            final now = DateTime.now();
             LocalListingsStore().rejectedSubscriptions.insert(0, {
-              'id': item['id'],
-              'businessName': item['businessName'],
-              'tier': item['tier'],
-              'dealerName': 'Dealer',
-              'reason': reason,
-              'time': 'Declined just now',
-            });
-            final requesterPhone = item['phone'] ?? '';
-            ClientNotificationStore().addNotification(
-              'Your subscription request was declined. Reason: $reason',
-              'subscription_rejected',
-              requesterPhone,
-              refId: id,
-            );
-          } else {
-            final item = LocalListingsStore().pendingSubscriptions
-                .firstWhere((e) => e['id'] == id);
-            if (item['phone'] != null) {
-              SubscriptionStore().reject(item['phone']);
-            }
-            LocalListingsStore().rejectSubscription({
               ...item,
-              'dealerName': item['dealerName'] ?? 'Dealer',
+              'status': 'Rejected',
               'reason': reason,
-              'time': 'Declined just now',
+              'rejectedAt': now.toIso8601String(),
+              'time': DateFormat('dd MMM yyyy, hh:mm a').format(now),
+              'auditLog': 'Rejected by admin on ${DateFormat('dd MMM yyyy, hh:mm a').format(now)}. Reason: $reason',
             });
-            final requesterPhone = item['phone'] ?? '';
-            ClientNotificationStore().addNotification(
-              'Your subscription request was declined. Reason: $reason',
-              'subscription_rejected',
-              requesterPhone,
-              refId: id,
-            );
+            if (phone.isNotEmpty) {
+              ClientNotificationStore().addNotification(
+                'Your subscription request was declined. Reason: $reason',
+                'subscription_rejected',
+                phone,
+                refId: id,
+              );
+            }
+            final clientName = _s(item['businessName'] ?? item['clientName'], 'Client');
+            AdminClientsStore().history.insert(0, {
+              'name': clientName,
+              'action': 'subscription rejected: $reason',
+              'time': DateFormat('dd MMM yyyy, hh:mm a').format(now),
+              'type': 'Rejected',
+            });
           }
         }
       });
@@ -720,21 +804,28 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Approval Center',
-                style: TextStyle(
-                    color: _navy, fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Verify & publish user submissions',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Approval Center',
+                  style: TextStyle(
+                      color: _navy, fontSize: 20, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Verify & publish user submissions',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -867,7 +958,25 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         ),
       );
     }
-    
+
+    int? pendingCount;
+    int? acceptedCount;
+    int? rejectedCount;
+
+    if (_selectedCategory == MainCategory.subscriptions) {
+      pendingCount = LocalListingsStore().pendingSubscriptions.length;
+      acceptedCount = LocalListingsStore().acceptedSubscriptions.length;
+      rejectedCount = LocalListingsStore().rejectedSubscriptions.length;
+    } else if (_selectedCategory == MainCategory.vehiclePosts) {
+      pendingCount = LocalListingsStore().pendingListings.length;
+      acceptedCount = LocalListingsStore().acceptedListings.length;
+      rejectedCount = LocalListingsStore().rejectedListings.length;
+    } else if (_selectedCategory == MainCategory.payments) {
+      pendingCount = LocalListingsStore().pendingPayments.where((p) => p['status'] == 'TOKEN PENDING VERIFICATION' || p['status'] == 'BALANCE PENDING VERIFICATION').length;
+      acceptedCount = LocalListingsStore().pendingPayments.where((p) => p['status'] == 'TOKEN VERIFIED' || p['status'] == 'PAYMENT COMPLETED').length;
+      rejectedCount = LocalListingsStore().rejectedPayments.length;
+    }
+
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -877,11 +986,11 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           children: [
             Row(
               children: [
-                _buildSubStateTab(SubState.pending, 'Pending Only', _orange),
+                _buildSubStateTab(SubState.pending, 'Pending Only', _orange, pendingCount),
                 const SizedBox(width: 8),
-                _buildSubStateTab(SubState.accepted, 'Accepted', _green),
+                _buildSubStateTab(SubState.accepted, 'Accepted', _green, acceptedCount),
                 const SizedBox(width: 8),
-                _buildSubStateTab(SubState.rejected, 'Rejected', _red),
+                _buildSubStateTab(SubState.rejected, 'Rejected', _red, rejectedCount),
               ],
             ),
           ],
@@ -890,7 +999,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     );
   }
 
-  Widget _buildSubStateTab(SubState state, String label, Color activeColor) {
+  Widget _buildSubStateTab(SubState state, String label, Color activeColor, [int? count]) {
     bool isActive = _selectedSubState == state;
     return GestureDetector(
       onTap: () => setState(() => _selectedSubState = state),
@@ -903,13 +1012,36 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                   color: isActive ? activeColor : Colors.transparent,
                   width: 2)),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? activeColor : Colors.grey.shade600,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            fontSize: 13,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? activeColor : Colors.grey.shade600,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+            if (count != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isActive ? activeColor.withValues(alpha: 0.15) : Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    color: isActive ? activeColor : Colors.grey.shade700,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -997,7 +1129,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           final type = _s(item['type']).toUpperCase();
           final utr = _s(item['utr']);
           final status = _s(item['status']);
-          final time = _s(item['time'], 'Confirmed just now');
+          final time = _s(item['time'], 'Confirmed recently');
           final id = _s(item['id']);
           return _buildHistoryCard(
             icon: Icons.check_circle,
@@ -1031,7 +1163,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           final reason = rejectionReason.isNotEmpty
               ? rejectionReason
               : (reasonFallback.isNotEmpty ? reasonFallback : 'Declined by admin');
-          final time = _s(item['time'], 'Declined just now');
+          final time = _s(item['time'], 'Declined recently');
           final id = _s(item['id']);
           return _buildHistoryCard(
             icon: Icons.cancel,
@@ -1404,6 +1536,791 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   }
 
   // ==========================================
+  // VEHICLE POSTS HELPERS & DOCUMENT VIEWERS
+  // ==========================================
+  Future<Uint8List?> _getInspectionBytes(Map<String, dynamic> item) async {
+    final id = _s(item['id']);
+    if (_inspectionBytesCache.containsKey(id)) {
+      return _inspectionBytesCache[id];
+    }
+
+    if (item['inspectionReportBytes'] is Uint8List) {
+      final b = item['inspectionReportBytes'] as Uint8List;
+      if (b.isNotEmpty) {
+        _inspectionBytesCache[id] = b;
+        return b;
+      }
+    }
+
+    final phone = _s(item['sellerPhone'] ?? item['phone'], 'unknown_phone');
+    try {
+      final blob = BlobStorage();
+      var bytes = await blob.get('$phone/$id/inspection');
+      if (bytes == null || bytes.isEmpty) {
+        bytes = await blob.get('$id/inspection');
+      }
+      if (bytes != null && bytes.isNotEmpty) {
+        _inspectionBytesCache[id] = bytes;
+        return bytes;
+      }
+    } catch (_) {}
+
+    _inspectionBytesCache[id] = null;
+    return null;
+  }
+
+  bool _hasInspectionSync(Map<String, dynamic> item) {
+    final id = _s(item['id']);
+    if (_inspectionBytesCache.containsKey(id)) {
+      return _inspectionBytesCache[id] != null;
+    }
+    if (item['inspectionReportBytes'] is Uint8List) {
+      final b = item['inspectionReportBytes'] as Uint8List;
+      if (b.isNotEmpty) {
+        _inspectionBytesCache[id] = b;
+        return true;
+      }
+    }
+    _getInspectionBytes(item).then((bytes) {
+      if (mounted && bytes != null) setState(() {});
+    });
+    return false;
+  }
+
+  String _formatSubmittedTime(Map<String, dynamic> item) {
+    final createdAtRaw = item['createdAt'];
+    if (createdAtRaw != null && createdAtRaw.toString().isNotEmpty) {
+      try {
+        final dt = DateTime.parse(createdAtRaw.toString());
+        return DateFormat('dd MMM yyyy, hh:mm a').format(dt);
+      } catch (_) {}
+    }
+    final idStr = _s(item['id']);
+    final parsedMs = int.tryParse(idStr);
+    if (parsedMs != null && parsedMs > 1000000000000) {
+      try {
+        final dt = DateTime.fromMillisecondsSinceEpoch(parsedMs);
+        return DateFormat('dd MMM yyyy, hh:mm a').format(dt);
+      } catch (_) {}
+    }
+    return 'Recently';
+  }
+
+  Widget _buildDetailField(String label, String value, {Color? valueColor}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: 9.5,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.4,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value.isEmpty ? '—' : value,
+          style: TextStyle(
+            color: valueColor ?? _navy,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
+  void _openPhotoGallery(Map<String, dynamic> item) {
+    final photoLabels = [
+      'Front View',
+      'Rear View',
+      'Left / Right View',
+      'Interior & Dashboard',
+      'Engine & Tyres',
+      'RC / Insurance Doc',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        int currentIndex = 0;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final screenWidth = MediaQuery.of(context).size.width;
+            final isNarrow = screenWidth < 600;
+
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: isNarrow ? 12 : 32,
+                vertical: 24,
+              ),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 700, maxHeight: 600),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: const BoxDecoration(
+                        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _s(item['title'], 'Vehicle Photos'),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: _navy,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Photo ${currentIndex + 1} of ${photoLabels.length}: ${photoLabels[currentIndex]}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _orange,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(ctx),
+                            tooltip: 'Close',
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: ListingImage(
+                                  listing: item,
+                                  index: currentIndex,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 8,
+                            child: CircleAvatar(
+                              backgroundColor: currentIndex > 0
+                                  ? Colors.black.withValues(alpha: 0.6)
+                                  : Colors.grey.withValues(alpha: 0.3),
+                              radius: 20,
+                              child: IconButton(
+                                icon: const Icon(Icons.chevron_left, color: Colors.white, size: 22),
+                                onPressed: currentIndex > 0
+                                    ? () => setDialogState(() => currentIndex--)
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 8,
+                            child: CircleAvatar(
+                              backgroundColor: currentIndex < photoLabels.length - 1
+                                  ? Colors.black.withValues(alpha: 0.6)
+                                  : Colors.grey.withValues(alpha: 0.3),
+                              radius: 20,
+                              child: IconButton(
+                                icon: const Icon(Icons.chevron_right, color: Colors.white, size: 22),
+                                onPressed: currentIndex < photoLabels.length - 1
+                                    ? () => setDialogState(() => currentIndex++)
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      height: 72,
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF9FAFB),
+                        border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                      ),
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: photoLabels.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, idx) {
+                          final isSelected = idx == currentIndex;
+                          return GestureDetector(
+                            onTap: () => setDialogState(() => currentIndex = idx),
+                            child: Container(
+                              width: 60,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSelected ? _orange : Colors.grey.shade300,
+                                  width: isSelected ? 2.5 : 1,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: ListingImage(
+                                  listing: item,
+                                  index: idx,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _openListingPdfPreview(Map<String, dynamic> item) {
+    final id = _s(item['id']);
+    setState(() {
+      _viewedListingPdf.add(id);
+    });
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog.fullscreen(
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF3F4F6),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 1,
+            leading: IconButton(
+              icon: const Icon(Icons.close, color: Colors.black),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Listing Details (5-step PDF)',
+                    style: TextStyle(fontSize: 13, color: Colors.grey)),
+                Text(
+                  _s(item['title'], 'Listing PDF'),
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: FutureBuilder<Uint8List>(
+                future: ListingDocumentService.generateListingPdf(item),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return Center(
+                      child: Text('Failed to generate listing PDF: ${snapshot.error}'),
+                    );
+                  }
+                  final pdfData = snapshot.data!;
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: PdfPreview(
+                          build: (format) => pdfData,
+                          canChangeOrientation: false,
+                          canChangePageFormat: false,
+                          canDebug: false,
+                          useActions: false,
+                        ),
+                      ),
+                      Container(
+                        color: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 12, horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _orange,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 24, vertical: 12),
+                              ),
+                              icon: const Icon(Icons.download),
+                              label: const Text('Download PDF'),
+                              onPressed: () => ShareService.downloadPdf(
+                                context,
+                                pdfData,
+                                'listing-$id.pdf',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openInspectionPdfPreview(Map<String, dynamic> item) async {
+    final id = _s(item['id']);
+    final pdfBytes = await _getInspectionBytes(item);
+    if (!mounted) return;
+
+    if (pdfBytes == null ||
+        pdfBytes.length < 4 ||
+        pdfBytes[0] != 0x25 ||
+        pdfBytes[1] != 0x50 ||
+        pdfBytes[2] != 0x44 ||
+        pdfBytes[3] != 0x46) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Inspection report not uploaded or invalid format'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _viewedInspection.add(id);
+    });
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog.fullscreen(
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF3F4F6),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 1,
+            leading: IconButton(
+              icon: const Icon(Icons.close, color: Colors.black),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Inspection Report (PDF)',
+                    style: TextStyle(fontSize: 13, color: Colors.grey)),
+                Text(
+                  _s(item['title'], 'Inspection PDF'),
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: PdfPreview(
+                      build: (format) => pdfBytes,
+                      canChangeOrientation: false,
+                      canChangePageFormat: false,
+                      canDebug: false,
+                      useActions: false,
+                    ),
+                  ),
+                  Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _orange,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
+                          ),
+                          icon: const Icon(Icons.download),
+                          label: const Text('Download Report'),
+                          onPressed: () => ShareService.downloadPdf(
+                            context,
+                            pdfBytes,
+                            _s(item['inspectionReportName'], 'inspection-$id.pdf'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDocumentsDialog(Map<String, dynamic> item) {
+    final id = _s(item['id']);
+    final hasInspection = _hasInspectionSync(item);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final viewedListing = _viewedListingPdf.contains(id);
+          final viewedInspection = _viewedInspection.contains(id);
+          final bothViewed = viewedListing && viewedInspection;
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.folder_shared_outlined, color: Colors.blue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Listing Documents',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: _navy,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _s(item['title'], 'Vehicle Details'),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: bothViewed
+                          ? _green.withValues(alpha: 0.1)
+                          : _orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: bothViewed
+                            ? _green.withValues(alpha: 0.3)
+                            : _orange.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          bothViewed ? Icons.check_circle : Icons.info_outline,
+                          size: 16,
+                          color: bothViewed ? _green : _orange,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            bothViewed
+                                ? 'Both documents reviewed. Publishing is enabled.'
+                                : 'Review both documents to publish.',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: bothViewed ? _green : _orange,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () {
+                      _openListingPdfPreview(item);
+                      setDialogState(() {});
+                      setState(() {});
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: viewedListing ? _green : Colors.grey.shade300,
+                          width: viewedListing ? 1.5 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        color: viewedListing ? _green.withValues(alpha: 0.04) : Colors.white,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.picture_as_pdf, color: Colors.blue, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Listing Details (5-step PDF)',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Generated in-app listing summary',
+                                  style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: viewedListing
+                                  ? _green.withValues(alpha: 0.12)
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              viewedListing ? 'Viewed ✓' : 'Preview',
+                              style: TextStyle(
+                                color: viewedListing ? _green : Colors.grey.shade700,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: hasInspection
+                        ? () {
+                            _openInspectionPdfPreview(item);
+                            setDialogState(() {});
+                            setState(() {});
+                          }
+                        : null,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: !hasInspection
+                              ? _red.withValues(alpha: 0.4)
+                              : (viewedInspection ? _green : Colors.grey.shade300),
+                          width: viewedInspection ? 1.5 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        color: !hasInspection
+                            ? Colors.grey.shade50
+                            : (viewedInspection ? _green.withValues(alpha: 0.04) : Colors.white),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: !hasInspection
+                                  ? Colors.grey.shade200
+                                  : _orange.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.verified_outlined,
+                              color: !hasInspection ? Colors.grey : _orange,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Inspection Report (PDF)',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  hasInspection
+                                      ? 'Seller uploaded inspection certificate'
+                                      : 'Not uploaded (Publish disabled)',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: hasInspection ? Colors.grey.shade600 : _red,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: !hasInspection
+                                  ? _red.withValues(alpha: 0.1)
+                                  : (viewedInspection
+                                      ? _green.withValues(alpha: 0.12)
+                                      : Colors.grey.shade100),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              !hasInspection
+                                  ? 'Not uploaded'
+                                  : (viewedInspection ? 'Viewed ✓' : 'Preview'),
+                              style: TextStyle(
+                                color: !hasInspection
+                                    ? _red
+                                    : (viewedInspection ? _green : Colors.grey.shade700),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _confirmAndPublishVehicle(Map<String, dynamic> item) {
+    if (_isProcessing) return;
+    final id = _s(item['id']);
+    final duration = _i(item['durationHours'] ?? item['duration'], 48);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Publish'),
+        content: Text(
+          'Are you sure you want to publish "${_s(item['title'])}" for auction duration of $duration Hours?\n\nBoth listing details and seller inspection report have been reviewed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _orange,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              try {
+                _handleApprove(id, MainCategory.vehiclePosts);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Vehicle published successfully')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error publishing vehicle: $e'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Publish Now'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
   // VEHICLE POSTS
   // ==========================================
   Widget _buildVehiclePostsContent() {
@@ -1421,6 +2338,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         countTextColor: Colors.grey.shade800,
         items: allPendingVehicles,
         itemBuilder: _buildPendingVehicleCard,
+        emptyMessage: 'No pending vehicle posts',
       );
     } else if (_selectedSubState == SubState.accepted) {
       return _buildListScaffold(
@@ -1432,6 +2350,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         countTextColor: _green,
         items: allAcceptedVehicles,
         itemBuilder: _buildAcceptedVehicleCard,
+        emptyMessage: 'No accepted vehicle posts',
       );
     } else {
       return _buildListScaffold(
@@ -1443,269 +2362,729 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         countTextColor: _red,
         items: allRejectedVehicles,
         itemBuilder: _buildRejectedVehicleCard,
+        emptyMessage: 'No rejected vehicle posts',
       );
     }
   }
 
   Widget _buildPendingVehicleCard(Map<String, dynamic> item) {
-    String reg = _s(item['registrationNumber'] ?? item['regNo'], 'Not provided');
-    String displayReg = reg.length >= 5 ? reg.substring(0, 5) : reg;
+    final id = _s(item['id']);
+    final title = _s(item['title'], 'Untitled vehicle');
+    final year = _s(item['year']);
+    final brand = _s(item['brand']);
+    final model = _s(item['model']);
+    final variant = _s(item['variant']);
+    final spec = [year, brand, model, variant].where((s) => s.isNotEmpty).join(' ');
+    final vehicleSpec = spec.isNotEmpty ? spec : title;
 
-    return _buildCardWrapper(
-      itemId: _s(item['id']),
-      child: Column(
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final regNo = _s(item['registrationNumber'] ?? item['regNo'], 'Not provided');
+    final km = _s(item['kilometersDriven'] ?? item['km']);
+    final kmDisplay = km.isNotEmpty ? '$km km' : 'Not provided';
+    final fuel = _s(item['fuelType'] ?? item['fuel'], 'Not provided');
+    final transmission = _s(item['transmission'], 'Not provided');
+    final owners = _s(item['owner'] ?? item['owners'], 'Not provided');
+
+    final insuranceType = _s(item['insuranceType'], 'Not specified');
+    final expiryRaw = item['insuranceExpiryDate'] ?? item['insuranceExpiry'];
+    String insuranceDisplay = insuranceType;
+    if (expiryRaw != null) {
+      try {
+        final dt = DateTime.parse(expiryRaw.toString());
+        insuranceDisplay += ' (Exp: ${DateFormat('dd MMM yyyy').format(dt)})';
+      } catch (_) {
+        insuranceDisplay += ' (Exp: $expiryRaw)';
+      }
+    }
+
+    final priceDisplay = _formatPrice(item['price']);
+    final durationDisplay = '${_s(item['durationHours'] ?? item['duration'], '48')} Hours';
+
+    final sellerName = _s(item['sellerName'], 'Unknown');
+    final sellerPhone = _s(item['sellerPhone'] ?? item['phone'], '');
+    final sellerDisplay = sellerPhone.isNotEmpty ? '$sellerName • $sellerPhone' : sellerName;
+
+    final city = _s(item['city']);
+    final state = _s(item['state']);
+    final locationDisplay = [city, state].where((s) => s.isNotEmpty).join(', ').isEmpty
+        ? _s(item['location'], 'Not provided')
+        : [city, state].where((s) => s.isNotEmpty).join(', ');
+
+    final submittedDisplay = _formatSubmittedTime(item);
+
+    final hasInspection = _hasInspectionSync(item);
+    final viewedListing = _viewedListingPdf.contains(id);
+    final viewedInspection = _viewedInspection.contains(id);
+    final canPublish = hasInspection && viewedListing && viewedInspection;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+
+        final photoWidget = GestureDetector(
+          onTap: () => _openPhotoGallery(item),
+          child: Stack(
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  _s(item['imageUrl'], ''),
-                  width: 80,
-                  height: 80,
+                child: ListingImage(
+                  listing: item,
+                  index: 0,
+                  width: isMobile ? 120 : 160,
+                  height: isMobile ? 90 : 120,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                      width: 80,
-                      height: 80,
-                      color: Colors.grey.shade300,
-                      child: const Icon(Icons.car_crash)),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _s(item['title'], 'Untitled vehicle'),
-                            style: TextStyle(
-                                color: _navy,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Text(_formatPrice(item['price']),
-                            style: TextStyle(
-                                color: _navy,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15)),
-                      ],
-                    ),
-                    if (item['tag'] != null)
-                      Container(
-                        margin: const EdgeInsets.only(top: 4, bottom: 2),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(4)),
-                        child: Text(_s(item['tag']),
-                            style: TextStyle(
-                                color: Colors.grey.shade700, fontSize: 10)),
-                      ),
-                    const SizedBox(height: 4),
-                    Text(
-                        'Seller: ${_s(item['sellerName'], 'Unknown seller')} • ${_s(item['location'], 'Location not provided')} ($displayReg)',
-                        style: TextStyle(
-                            color: Colors.grey.shade600, fontSize: 12)),
-                    Text('Submitted ${_s(item['timeAgo'])}',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic)),
-                  ],
+              Positioned(
+                bottom: 4,
+                right: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.photo_library, color: Colors.white, size: 10),
+                      SizedBox(width: 3),
+                      Text('Photos', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
-          
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
+        );
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          
-          Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
+              if (isMobile) ...[
+                Center(child: photoWidget),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('LISTING TYPE',
+                    Expanded(
+                      child: Text(
+                        title,
                         style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(_s(item['type']),
-                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: _navy,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      priceDisplay,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: _orange,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+                const SizedBox(height: 2),
+                Text(
+                  vehicleSpec,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
+                ),
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('RC STATUS',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text('● ${_s(item['rcStatus'])}',
-                        style: TextStyle(
-                            color: _s(item['rcStatus']) == 'Clear' ? _green : _orange,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildDetailField('Reg Number', regNo),
+                          const SizedBox(height: 8),
+                          _buildDetailField('KM Driven', kmDisplay),
+                          const SizedBox(height: 8),
+                          _buildDetailField('Fuel Type', fuel),
+                          const SizedBox(height: 8),
+                          _buildDetailField('Transmission', transmission),
+                          const SizedBox(height: 8),
+                          _buildDetailField('Owners', owners),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildDetailField('Insurance', insuranceDisplay),
+                          const SizedBox(height: 8),
+                          _buildDetailField('Auction Duration', durationDisplay),
+                          const SizedBox(height: 8),
+                          _buildDetailField('Seller', sellerDisplay),
+                          const SizedBox(height: 8),
+                          _buildDetailField('City / State', locationDisplay),
+                          const SizedBox(height: 8),
+                          _buildDetailField('Submitted', submittedDisplay),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+              ] else ...[
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('INSPECTION',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(_s(item['inspection']),
-                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
+                    photoWidget,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      title,
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.bold,
+                                        color: _navy,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      vehicleSpec,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                priceDisplay,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: _orange,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildDetailField('Reg Number', regNo),
+                                    const SizedBox(height: 8),
+                                    _buildDetailField('KM Driven', kmDisplay),
+                                    const SizedBox(height: 8),
+                                    _buildDetailField('Fuel Type', fuel),
+                                    const SizedBox(height: 8),
+                                    _buildDetailField('Transmission', transmission),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildDetailField('Owners', owners),
+                                    const SizedBox(height: 8),
+                                    _buildDetailField('Insurance', insuranceDisplay),
+                                    const SizedBox(height: 8),
+                                    _buildDetailField('Auction Duration', durationDisplay),
+                                    const SizedBox(height: 8),
+                                    _buildDetailField('City / State', locationDisplay),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildDetailField('Seller', sellerDisplay),
+                                    const SizedBox(height: 8),
+                                    _buildDetailField('Submitted', submittedDisplay),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ],
-          ),
-
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
-          ),
-          
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              GestureDetector(
-                onTap: () => _showDocumentViewerPlaceholder(item['id'] != null ? _s(item['id']) : null),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.visibility, color: Colors.blue, size: 16),
-                    SizedBox(width: 6),
-                    Text('View Documents',
-                        style: TextStyle(
-                            color: Colors.blue,
-                            decoration: TextDecoration.underline,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
+              ],
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
               ),
               Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 12,
-                runSpacing: 12,
+                runSpacing: 10,
                 children: [
-                  OutlinedButton(
-                    onPressed: () => _handleReject(_s(item['id']), MainCategory.vehiclePosts),
+                  OutlinedButton.icon(
+                    onPressed: () => _showDocumentsDialog(item),
+                    icon: const Icon(Icons.description_outlined, size: 16, color: Colors.blue),
+                    label: Text(
+                      'View Documents (${(viewedListing ? 1 : 0) + (viewedInspection ? 1 : 0)}/2 reviewed)',
+                      style: const TextStyle(color: Colors.blue, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: _red,
-                      side: BorderSide(color: _red.withValues(alpha: 0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      side: const BorderSide(color: Colors.blue),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
-                    child: const Text('✕ Reject'),
                   ),
-                  ElevatedButton(
-                    onPressed: () => _handleApprove(_s(item['id']), MainCategory.vehiclePosts),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _orange,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    child: const Text('✓ Publish'),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () => _handleReject(id, MainCategory.vehiclePosts),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _red,
+                          side: BorderSide(color: _red.withValues(alpha: 0.5)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        child: const Text('✕ Reject'),
+                      ),
+                      Tooltip(
+                        message: !hasInspection
+                            ? 'Inspection report not uploaded - cannot publish'
+                            : (!canPublish ? 'Review both documents to publish' : ''),
+                        child: ElevatedButton(
+                          onPressed: canPublish
+                              ? () => _confirmAndPublishVehicle(item)
+                              : () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        !hasInspection
+                                            ? 'Inspection report not uploaded by seller'
+                                            : 'Review both documents to publish',
+                                      ),
+                                    ),
+                                  );
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: canPublish ? _orange : Colors.grey.shade400,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                          child: const Text('✓ Publish'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              )
+              ),
+              if (!canPublish)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    !hasInspection
+                        ? '• Inspection report not uploaded (Publish disabled)'
+                        : '• Review both documents to publish',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: !hasInspection ? _red : Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
             ],
-          )
-        ],
-      ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildAcceptedVehicleCard(Map<String, dynamic> item) {
-    String reg = _s(item['registrationNumber'] ?? item['regNo'], 'Not provided');
-    String displayReg = reg.length >= 5 ? reg.substring(0, 5) : reg;
+    final title = _s(item['title'], 'Untitled vehicle');
+    final year = _s(item['year']);
+    final brand = _s(item['brand']);
+    final model = _s(item['model']);
+    final variant = _s(item['variant']);
+    final spec = [year, brand, model, variant].where((s) => s.isNotEmpty).join(' ');
+    final vehicleSpec = spec.isNotEmpty ? spec : title;
 
-    Widget card = _buildHistoryCard(
-      icon: Icons.check_circle,
-      iconColor: _green,
-      title: '${_s(item['title'], 'Untitled vehicle')} (${_formatPrice(item['price'])})',
-      subtitle: 'Seller: ${_s(item['sellerName'], 'Unknown seller')} • Ref: #${_s(item['ref'], displayReg)}',
-      statusLabel: 'Approved',
-      statusColor: _green,
-      time: _s(item['timeAgo'] ?? item['time']),
-      itemId: _s(item['id']),
-    );
-    
-    final itemStatus = _s(item['status']).toLowerCase();
-    if (itemStatus == 'live') {
-      return Column(
-        children: [
-          card,
-          TextButton(
-            onPressed: () {
-              try {
-                final String itemId = _s(item['id']);
-                item['endTime'] = DateTime.now().toIso8601String();
-                LocalListingsStore().endAuction(itemId);
-                setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Auction ended')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error ending auction: $e')),
-                );
-              }
-            },
-            child: const Text("End auction now (test)"),
-          )
-        ],
-      );
+    final regNo = _s(item['registrationNumber'] ?? item['regNo'], 'Not provided');
+    final km = _s(item['kilometersDriven'] ?? item['km']);
+    final kmDisplay = km.isNotEmpty ? '$km km' : 'Not provided';
+    final fuel = _s(item['fuelType'] ?? item['fuel'], 'Not provided');
+    final transmission = _s(item['transmission'], 'Not provided');
+
+    final priceDisplay = _formatPrice(item['price']);
+    final durationDisplay = '${_s(item['durationHours'] ?? item['duration'], '48')} Hours';
+
+    final sellerName = _s(item['sellerName'], 'Unknown');
+    final sellerPhone = _s(item['sellerPhone'] ?? item['phone'], '');
+    final sellerDisplay = sellerPhone.isNotEmpty ? '$sellerName • $sellerPhone' : sellerName;
+
+    final city = _s(item['city']);
+    final state = _s(item['state']);
+    final locationDisplay = [city, state].where((s) => s.isNotEmpty).join(', ').isEmpty
+        ? _s(item['location'], 'Not provided')
+        : [city, state].where((s) => s.isNotEmpty).join(', ');
+
+    final statusStr = _s(item['status']).toLowerCase();
+    final bool isLive = _b(item['isLive'], statusStr == 'live');
+
+    String endTimeStr = 'Not set';
+    if (item['endTime'] != null && item['endTime'].toString().isNotEmpty) {
+      try {
+        final dt = DateTime.parse(item['endTime'].toString());
+        endTimeStr = DateFormat('dd MMM yyyy, hh:mm a').format(dt);
+      } catch (_) {
+        endTimeStr = item['endTime'].toString();
+      }
     }
-    return card;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: () => _openPhotoGallery(item),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: ListingImage(
+                        listing: item,
+                        index: 0,
+                        width: isMobile ? 100 : 140,
+                        height: isMobile ? 75 : 105,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: _navy,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isLive ? _green.withValues(alpha: 0.12) : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                isLive ? '● LIVE' : 'ENDED',
+                                style: TextStyle(
+                                  color: isLive ? _green : Colors.grey.shade700,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          vehicleSpec,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '$priceDisplay • Reg: $regNo • $sellerDisplay',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
+              ),
+              Wrap(
+                spacing: 16,
+                runSpacing: 6,
+                children: [
+                  _buildDetailField('End Time', endTimeStr, valueColor: isLive ? _green : Colors.grey.shade600),
+                  _buildDetailField('Duration', durationDisplay),
+                  _buildDetailField('KM', kmDisplay),
+                  _buildDetailField('Fuel', fuel),
+                  _buildDetailField('Transmission', transmission),
+                  _buildDetailField('City/State', locationDisplay),
+                ],
+              ),
+              if (isLive) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: _orange,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    ),
+                    icon: const Icon(Icons.timer_off, size: 14),
+                    label: const Text('End auction now (test)', style: TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      try {
+                        final String itemId = _s(item['id']);
+                        item['endTime'] = DateTime.now().toIso8601String();
+                        item['status'] = 'ended';
+                        LocalListingsStore().endAuction(itemId);
+                        setState(() {});
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Auction ended')),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error ending auction: $e')),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildRejectedVehicleCard(Map<String, dynamic> item) {
-    return _buildHistoryCard(
-      icon: Icons.cancel,
-      iconColor: _red,
-      title: _s(item['title'], 'Untitled vehicle'),
-      subtitle: 'Seller: ${_s(item['sellerName'], 'Unknown seller')} • ${_s(item['reason'])}',
-      statusLabel: 'Declined',
-      statusColor: _red,
-      time: _s(item['timeAgo'] ?? item['time']),
+    final title = _s(item['title'], 'Untitled vehicle');
+    final year = _s(item['year']);
+    final brand = _s(item['brand']);
+    final model = _s(item['model']);
+    final variant = _s(item['variant']);
+    final spec = [year, brand, model, variant].where((s) => s.isNotEmpty).join(' ');
+    final vehicleSpec = spec.isNotEmpty ? spec : title;
+
+    final regNo = _s(item['registrationNumber'] ?? item['regNo'], 'Not provided');
+    final priceDisplay = _formatPrice(item['price']);
+    final sellerName = _s(item['sellerName'], 'Unknown');
+    final sellerPhone = _s(item['sellerPhone'] ?? item['phone'], '');
+    final sellerDisplay = sellerPhone.isNotEmpty ? '$sellerName • $sellerPhone' : sellerName;
+
+    final reason = _s(item['rejectReason'] ?? item['reason'], 'No reason specified');
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: () => _openPhotoGallery(item),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: ListingImage(
+                        listing: item,
+                        index: 0,
+                        width: isMobile ? 100 : 140,
+                        height: isMobile ? 75 : 105,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: _navy,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _red.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'REJECTED',
+                                style: TextStyle(
+                                  color: _red,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          vehicleSpec,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '$priceDisplay • Reg: $regNo • $sellerDisplay',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _red.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.cancel_outlined, size: 16, color: _red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Rejection Reason: $reason',
+                        style: TextStyle(
+                          color: _red,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1934,7 +3313,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
       subtitle: 'Bidder: ${item['bidderName'] ?? item['bidder'] ?? 'Unknown'} • Ref: #${item['ref'] ?? 'N/A'}',
       statusLabel: 'Accepted',
       statusColor: _green,
-      time: item['time'] ?? 'Just now',
+      time: item['time'] ?? 'Recently',
       itemId: item['id'],
     );
   }
@@ -1969,6 +3348,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         countTextColor: Colors.grey.shade800,
         items: allPendingSubs,
         itemBuilder: _buildPendingSubscriptionCard,
+        emptyMessage: 'No pending subscriptions',
       );
     } else if (_selectedSubState == SubState.accepted) {
       return _buildListScaffold(
@@ -1980,6 +3360,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         countTextColor: _green,
         items: allAcceptedSubs,
         itemBuilder: _buildAcceptedSubscriptionCard,
+        emptyMessage: 'No accepted subscriptions',
       );
     } else {
       return _buildListScaffold(
@@ -1991,226 +3372,560 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         countTextColor: _red,
         items: allRejectedSubs,
         itemBuilder: _buildRejectedSubscriptionCard,
+        emptyMessage: 'No rejected subscriptions',
       );
     }
   }
 
-  Widget _buildPendingSubscriptionCard(Map<String, dynamic> item) {
+  Map<String, String> _getPlanDetails(Map<String, dynamic> item) {
+    final planId = item['planId']?.toString() ?? '';
+    final tier = item['tier']?.toString() ?? item['planName']?.toString() ?? '';
+    SubscriptionPlan? plan;
+    if (planId.isNotEmpty) {
+      plan = SubscriptionPlans.getPlanById(planId);
+    }
+    if (plan == null && tier.isNotEmpty) {
+      try {
+        plan = SubscriptionPlans.plans.firstWhere(
+          (p) =>
+              p.name.toLowerCase() == tier.toLowerCase() ||
+              p.id.toLowerCase() == tier.toLowerCase(),
+        );
+      } catch (_) {
+        plan = null;
+      }
+    }
+
+    String name = plan?.name ?? (tier.isNotEmpty ? tier : 'Subscription Plan');
+    int days = plan?.durationDays ?? 0;
+    if (days == 0) {
+      final rawDays = item['durationDays'] ?? item['days'];
+      if (rawDays != null) {
+        days = int.tryParse(rawDays.toString()) ?? 0;
+      }
+    }
+    if (days == 0 && item.containsKey('duration')) {
+      final match = RegExp(r'\d+').firstMatch(item['duration'].toString());
+      if (match != null) {
+        days = int.tryParse(match.group(0)!) ?? 0;
+      }
+    }
+    if (days == 0) {
+      days = 30;
+    }
+
+    // Build the label once: "<planName> (<days> days)" without repeating the name;
+    // if planName already contains parentheses, do not append again.
+    String planLabel = name;
+    if (!planLabel.contains('(')) {
+      planLabel = '$name ($days days)';
+    }
+
+    dynamic price = item['price'] ?? plan?.price ?? 0;
+
+    return {
+      'name': name,
+      'label': planLabel,
+      'duration': '$days days',
+      'price': price.toString(),
+      'planId': plan?.id ?? (planId.isNotEmpty ? planId : 'yearly'),
+    };
+  }
+
+  String _formatSubscriptionPrice(dynamic amount) {
+    if (amount == null) return '₹0';
+    if (amount is num) {
+      return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(amount);
+    }
+    final str = amount.toString().replaceAll(RegExp(r'[^0-9]'), '');
+    final numVal = int.tryParse(str);
+    if (numVal != null) {
+      return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(numVal);
+    }
+    return amount.toString();
+  }
+
+  String _formatSubmittedDateTime(Map<String, dynamic> item) {
+    final rawDate = item['submittedAt'] ?? item['createdAt'] ?? item['timestamp'] ?? item['date'];
+    if (rawDate != null) {
+      if (rawDate is DateTime) {
+        return DateFormat('dd MMM yyyy, hh:mm a').format(rawDate);
+      }
+      try {
+        final parsed = DateTime.parse(rawDate.toString());
+        return DateFormat('dd MMM yyyy, hh:mm a').format(parsed);
+      } catch (_) {}
+    }
+    final idStr = item['id']?.toString() ?? '';
+    final match = RegExp(r'(\d{10,13})').firstMatch(idStr);
+    if (match != null) {
+      final ms = int.tryParse(match.group(1)!);
+      if (ms != null) {
+        final dt = ms < 10000000000
+            ? DateTime.fromMillisecondsSinceEpoch(ms * 1000)
+            : DateTime.fromMillisecondsSinceEpoch(ms);
+        return DateFormat('dd MMM yyyy, hh:mm a').format(dt);
+      }
+    }
+    final timeStr = item['time']?.toString() ?? '';
+    if (timeStr.isNotEmpty &&
+        !timeStr.toLowerCase().contains('ago') &&
+        !timeStr.toLowerCase().contains('just')) {
+      try {
+        final parsed = DateTime.parse(timeStr);
+        return DateFormat('dd MMM yyyy, hh:mm a').format(parsed);
+      } catch (_) {
+        return timeStr;
+      }
+    }
+    return DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
+  }
+
+  String _formatDate(dynamic dateVal) {
+    if (dateVal == null) return DateFormat('dd MMM yyyy').format(DateTime.now());
+    if (dateVal is DateTime) {
+      return DateFormat('dd MMM yyyy').format(dateVal);
+    }
+    try {
+      final parsed = DateTime.parse(dateVal.toString());
+      return DateFormat('dd MMM yyyy').format(parsed);
+    } catch (_) {
+      return dateVal.toString();
+    }
+  }
+
+  Widget _buildScreenshotThumbnail(dynamic screenshotKey) {
+    final key = screenshotKey?.toString().trim() ?? '';
+    final bool hasKey = key.isNotEmpty;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: !hasKey
+              ? Center(
+                  child: Icon(
+                    Icons.receipt_long_outlined,
+                    color: Colors.grey.shade400,
+                    size: 20,
+                  ),
+                )
+              : FutureBuilder<Uint8List?>(
+                  future: BlobStorage().get(key),
+                  builder: (context, snapshot) {
+                    final bytes = snapshot.data;
+                    if (bytes != null && bytes.isNotEmpty) {
+                      return Image.memory(
+                        bytes,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildThumbPlaceholder(),
+                      );
+                    }
+                    bool isLocalFile = false;
+                    try {
+                      isLocalFile = File(key).existsSync();
+                    } catch (_) {
+                      isLocalFile = false;
+                    }
+                    if (isLocalFile) {
+                      return Image.file(
+                        File(key),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildThumbPlaceholder(),
+                      );
+                    }
+                    return _buildThumbPlaceholder();
+                  },
+                ),
+        ),
+        const SizedBox(width: 6),
+        TextButton.icon(
+          onPressed: hasKey ? () => _showDocumentViewerPlaceholder(key) : null,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            foregroundColor: Colors.blue.shade700,
+          ),
+          icon: const Icon(Icons.visibility_outlined, size: 14),
+          label: const Text(
+            'View',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThumbPlaceholder() {
+    return Center(
+      child: Icon(
+        Icons.image_outlined,
+        color: Colors.grey.shade400,
+        size: 22,
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(SubState subState) {
+    Color color;
+    String label;
+    switch (subState) {
+      case SubState.pending:
+        color = _orange;
+        label = 'Pending';
+        break;
+      case SubState.accepted:
+        color = _green;
+        label = 'Approved';
+        break;
+      case SubState.rejected:
+        color = _red;
+        label = 'Rejected';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionCard(Map<String, dynamic> item, SubState subState) {
+    final phone = _s(item['phone'] ?? item['clientPhone']);
+    final clientName = _s(
+      item['clientName'] ??
+          item['businessName'] ??
+          item['dealerName'] ??
+          (phone.isNotEmpty ? _userNames[phone] : null),
+      'Client',
+    );
+    final city = _s(
+      item['city'] ??
+          item['userCity'] ??
+          item['location'] ??
+          (phone.isNotEmpty ? _userCities[phone] : null),
+      'Bengaluru',
+    );
+
+    final planDetails = _getPlanDetails(item);
+    final utr = _s(item['payRef'] ?? item['utr']);
+
+    final existingExpiry = phone.isNotEmpty ? _activeClientExpiries[phone] : null;
+    final bool isRenewal = existingExpiry != null && existingExpiry.isAfter(DateTime.now());
+
     return _buildCardWrapper(
       itemId: item['id'],
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Top Row: Avatar + Client Name, Phone, City + Status Chip
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: _navy, shape: BoxShape.circle),
-                child: Icon(
-                    item['tier'] == 'Elite Dealer'
-                        ? Icons.stars
-                        : Icons.workspace_premium,
-                    color: const Color(0xFFFFD700),
-                    size: 24),
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _navy,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    clientName.isNotEmpty ? clientName[0].toUpperCase() : 'C',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item['businessName'] ?? 'Unknown Business',
-                            style: TextStyle(
-                                color: _navy,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                              color: item['tierColor'] ?? Colors.blue,
-                              borderRadius: BorderRadius.circular(12)),
-                          child: Text(item['tier'] ?? 'Unknown Tier',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                      ],
+                    Text(
+                      clientName,
+                      style: TextStyle(
+                        color: _navy,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 4,
-                      children: [
-                        Text(
-                            '${item['id1Label'] ?? 'ID'}: ${item['id1Value'] ?? 'N/A'}',
-                            style: TextStyle(
-                                color: Colors.grey.shade600, fontSize: 11)),
-                        Text('•',
-                            style: TextStyle(
-                                color: Colors.grey.shade600, fontSize: 11)),
-                        Text(
-                            '${item['id2Label'] ?? 'ID'}: ${item['id2Value'] ?? 'N/A'}',
-                            style: TextStyle(
-                                color: Colors.grey.shade600, fontSize: 11)),
-                      ],
+                    const SizedBox(height: 2),
+                    Text(
+                      [if (phone.isNotEmpty) '+91 $phone', if (city.isNotEmpty) city].join(' • '),
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    Text('Submitted ${item['timeAgo'] ?? 'Recently'}',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic)),
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('PLAN TIER',
-                      style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold)),
-                  Text(_formatPrice(item['price']),
-                      style: TextStyle(
-                          color: _navy,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15)),
-                ],
-              )
+              const SizedBox(width: 8),
+              _buildStatusChip(subState),
             ],
           ),
-          
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
-          ),
-          
+
+          // Renewal / Active Plan Indicator
+          if (isRenewal) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Renewal',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Active until ${DateFormat('dd MMM yyyy').format(existingExpiry)}',
+                      style: const TextStyle(
+                        color: Color(0xFF1D4ED8),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Plan Name + Duration and Amount Row (Expanded with ellipsis)
+          const SizedBox(height: 12),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('PAYMENT REF',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(item['payRef'] ?? 'Pending',
-                            style: TextStyle(
-                                color: _navy,
-                                fontSize: 13,
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w600)),
-                        if (item['payRef'] != null) ...[
-                          const SizedBox(width: 4),
-                          GestureDetector(
-                            onTap: () {
-                              Clipboard.setData(ClipboardData(text: item['payRef']));
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                  content: Text('UTR Copied!'),
-                                  duration: Duration(seconds: 1)));
-                            },
-                            child: const Icon(Icons.copy, size: 14, color: Colors.blue),
-                          ),
-                        ]
-                      ],
-                    ),
-                  ],
+                child: Text(
+                  planDetails['label'] ?? planDetails['name'] ?? '',
+                  style: TextStyle(
+                    color: _navy,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('PAYMENT STATUS',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.check_circle, size: 14, color: _green),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(item['paymentStatus'] ?? 'Awaiting Verification',
-                              style: TextStyle(color: _green, fontSize: 13, fontWeight: FontWeight.w600)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.containsKey('gstStatus') && item['gstStatus'] != null ? 'GST STATUS' : 'KYC DOCS',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(item.containsKey('gstStatus') && item['gstStatus'] != null ? item['gstStatus'] : (item['kycDocs'] ?? 'Not Attached'),
-                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
-                  ],
+              const SizedBox(width: 8),
+              IntrinsicWidth(
+                child: Text(
+                  _formatSubscriptionPrice(planDetails['price']),
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: _navy,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
               ),
             ],
           ),
 
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
+            padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
           ),
-          
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              GestureDetector(
-                onTap: () => _showDocumentViewerPlaceholder(item['screenshot']),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.visibility, color: Colors.blue, size: 16),
-                    SizedBox(width: 6),
-                    Text('View Documents',
-                        style: TextStyle(
-                            color: Colors.blue,
-                            decoration: TextDecoration.underline,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
+
+          // UTR, Date & Screenshot Row
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 500;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'UTR: ${utr.isNotEmpty ? utr : 'Pending'}',
+                                style: TextStyle(
+                                  color: _navy,
+                                  fontSize: 13,
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (utr.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              InkWell(
+                                onTap: () {
+                                  Clipboard.setData(ClipboardData(text: utr));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('UTR Copied!'),
+                                      duration: Duration(seconds: 1),
+                                    ),
+                                  );
+                                },
+                                child: const Icon(Icons.copy, size: 14, color: Colors.blue),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(Icons.access_time, size: 13, color: Colors.grey.shade500),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                _formatSubmittedDateTime(item),
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isWide) const Spacer(),
+                  const SizedBox(width: 8),
+                  _buildScreenshotThumbnail(item['screenshot']),
+                ],
+              );
+            },
+          ),
+
+          // State specifics: Accepted start/expiry or Rejected reason
+          if (subState == SubState.accepted) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
               ),
-              Wrap(
+              child: Row(
+                children: [
+                  const Icon(Icons.verified, size: 14, color: Color(0xFF16A34A)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Start: ${_formatDate(item['startDate'] ?? item['approvedAt'])} • Expiry: ${_formatDate(item['endDate'])}',
+                      style: const TextStyle(
+                        color: Color(0xFF15803D),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (subState == SubState.rejected) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.cancel_outlined, size: 14, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Reason: ${_s(item['reason'], 'Declined by admin')}',
+                      style: const TextStyle(
+                        color: Color(0xFFB91C1C),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Action buttons for Pending
+          if (subState == SubState.pending) ...[
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                alignment: WrapAlignment.end,
                 spacing: 12,
-                runSpacing: 12,
+                runSpacing: 8,
                 children: [
                   OutlinedButton(
-                    onPressed: () => _handleReject(item['id'], MainCategory.subscriptions),
+                    onPressed: _isProcessing ? null : () => _handleSubscriptionReject(item),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _red,
                       side: BorderSide(color: _red.withValues(alpha: 0.5)),
@@ -2222,15 +3937,9 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                     child: const Text('✕ Reject'),
                   ),
                   ElevatedButton(
-                    onPressed: () {
-                      _showConfirmationDialog(
-                        title: 'Confirm Payment Verification',
-                        content: 'Confirm you have verified this UTR (${item['payRef']}) matches a real received payment of ${_formatPrice(item['price'])} in your bank/UPI records?',
-                        onConfirm: () => _handleApprove(item['id'], MainCategory.subscriptions),
-                      );
-                    },
+                    onPressed: _isProcessing ? null : () => _handleSubscriptionApprove(item),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _orange,
+                      backgroundColor: _green,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -2238,45 +3947,265 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
-                    child: const Text('✓ Approve Plan'),
+                    child: const Text('✓ Approve'),
                   ),
                 ],
-              )
-            ],
-          )
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildAcceptedSubscriptionCard(Map<String, dynamic> item) {
-    return _buildHistoryCard(
-      icon: Icons.check_circle,
-      iconColor: _green,
-      title:
-          '${item['businessName'] ?? 'Unknown'} (${item['tier'] ?? 'Unknown'} - ${_formatPrice(item['price'])})',
-      subtitle:
-          '${item['id1Label'] ?? 'ID'}: ${item['id1Value'] ?? 'N/A'} • Ref: #${item['ref'] ?? 'N/A'}',
-      statusLabel: 'Approved',
-      statusColor: _green,
-      time: item['time'] ?? 'Just now',
-      itemId: item['id'],
+  Future<void> _handleSubscriptionApprove(Map<String, dynamic> item) async {
+    if (_isProcessing) return;
+
+    final planDetails = _getPlanDetails(item);
+    final clientName = _s(
+      item['clientName'] ?? item['businessName'] ?? item['dealerName'],
+      'Client',
     );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Approval'),
+        content: Text(
+          'Confirm activation of ${planDetails['name']} subscription for $clientName?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _green,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Approve'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (_isProcessing) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final phone = _s(item['phone']);
+      final planId = planDetails['planId'] ?? 'yearly';
+      if (phone.isNotEmpty) {
+        await SubscriptionStore().activate(phone, planId);
+      }
+
+      final plan = SubscriptionPlans.getPlanById(planId);
+      final durationDays = plan?.durationDays ?? 365;
+      final now = DateTime.now();
+      final startDate = now;
+      final endDate = now.add(Duration(days: durationDays));
+
+      LocalListingsStore().acceptSubscription({
+        ...item,
+        'status': 'Approved',
+        'startDate': startDate.toIso8601String(),
+        'endDate': endDate.toIso8601String(),
+        'approvedAt': now.toIso8601String(),
+        'ref': 'SUB-${now.millisecondsSinceEpoch.toString().substring(8)}',
+        'time': DateFormat('dd MMM yyyy, hh:mm a').format(now),
+        'auditLog': 'Approved by admin on ${DateFormat('dd MMM yyyy, hh:mm a').format(now)}',
+      });
+
+      if (phone.isNotEmpty) {
+        ClientNotificationStore().addNotification(
+          'Your ${planDetails['name']} subscription is now active',
+          'subscription_active',
+          phone,
+          refId: item['id'],
+        );
+      }
+
+      AdminClientsStore().history.insert(0, {
+        'name': clientName,
+        'action': 'subscription approved (${planDetails['name']})',
+        'time': DateFormat('dd MMM yyyy, hh:mm a').format(now),
+        'type': 'Success',
+      });
+
+      await _loadUserProfiles();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subscription approved')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error approving subscription: $e'),
+            backgroundColor: _red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      } else {
+        _isProcessing = false;
+      }
+    }
+  }
+
+  Future<void> _handleSubscriptionReject(Map<String, dynamic> item) async {
+    if (_isProcessing) return;
+
+    final clientName = _s(
+      item['clientName'] ?? item['businessName'] ?? item['dealerName'],
+      'Client',
+    );
+    final reasonController = TextEditingController();
+    String? errorText;
+
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Reject Subscription'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Provide a reason for rejecting $clientName\'s subscription (min 5 chars):'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                autofocus: true,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'Enter rejection reason...',
+                  border: const OutlineInputBorder(),
+                  errorText: errorText,
+                ),
+                onChanged: (val) {
+                  if (errorText != null && val.trim().length >= 5) {
+                    setDialogState(() => errorText = null);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final trimmed = reasonController.text.trim();
+                if (trimmed.length < 5) {
+                  setDialogState(() {
+                    errorText = 'Reason must be at least 5 characters';
+                  });
+                  return;
+                }
+                Navigator.pop(ctx, trimmed);
+              },
+              child: const Text('Reject'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (reason == null || reason.trim().length < 5) return;
+    if (_isProcessing) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final phone = _s(item['phone']);
+      if (phone.isNotEmpty) {
+        await SubscriptionStore().reject(phone);
+      }
+
+      final now = DateTime.now();
+      LocalListingsStore().rejectSubscription({
+        ...item,
+        'status': 'Rejected',
+        'reason': reason,
+        'rejectedAt': now.toIso8601String(),
+        'time': DateFormat('dd MMM yyyy, hh:mm a').format(now),
+        'auditLog': 'Rejected by admin on ${DateFormat('dd MMM yyyy, hh:mm a').format(now)}. Reason: $reason',
+      });
+
+      if (phone.isNotEmpty) {
+        ClientNotificationStore().addNotification(
+          'Your subscription request was declined. Reason: $reason',
+          'subscription_rejected',
+          phone,
+          refId: item['id'],
+        );
+      }
+
+      AdminClientsStore().history.insert(0, {
+        'name': clientName,
+        'action': 'subscription rejected: $reason',
+        'time': DateFormat('dd MMM yyyy, hh:mm a').format(now),
+        'type': 'Rejected',
+      });
+
+      await _loadUserProfiles();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subscription rejected')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error rejecting subscription: $e'),
+            backgroundColor: _red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      } else {
+        _isProcessing = false;
+      }
+    }
+  }
+
+  Widget _buildPendingSubscriptionCard(Map<String, dynamic> item) {
+    return _buildSubscriptionCard(item, SubState.pending);
+  }
+
+  Widget _buildAcceptedSubscriptionCard(Map<String, dynamic> item) {
+    return _buildSubscriptionCard(item, SubState.accepted);
   }
 
   Widget _buildRejectedSubscriptionCard(Map<String, dynamic> item) {
-    return _buildHistoryCard(
-      icon: Icons.cancel,
-      iconColor: _red,
-      title:
-          '${item['businessName'] ?? 'Unknown'} (${item['tier'] ?? 'Unknown'})',
-      subtitle:
-          'Dealer: ${item['dealerName'] ?? 'Unknown'} • ${item['reason'] ?? 'Rejected'}',
-      statusLabel: 'Declined',
-      statusColor: _red,
-      time: item['time'] ?? 'Just now',
-      itemId: item['id'],
-    );
+    return _buildSubscriptionCard(item, SubState.rejected);
   }
 
   // ==========================================
@@ -2292,6 +4221,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     required Color countTextColor,
     required List<dynamic> items,
     required Widget Function(Map<String, dynamic>) itemBuilder,
+    String? emptyMessage,
   }) {
     return Column(
       children: [
@@ -2337,7 +4267,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
         Expanded(
           child: items.isEmpty
               ? Center(
-                  child: Text('No items found.',
+                  child: Text(emptyMessage ?? 'No items found.',
                       style: TextStyle(color: Colors.grey.shade500)))
               : ListView.separated(
                   padding:

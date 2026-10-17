@@ -38,7 +38,7 @@ class SharedBottomNav extends StatelessWidget {
                 if (AuthService.currentUserRole == 'admin') {
                   context.go('/admin');
                 } else {
-                  context.go('/subscription');
+                  context.go('/profile');
                 }
                 break;
             }
