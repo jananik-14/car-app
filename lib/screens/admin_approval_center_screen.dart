@@ -26,7 +26,7 @@ import '../config/subscription_plans.dart';
 import '../utils/profile_storage_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum MainCategory { vehiclePosts, bidding, subscriptions, payments }
+enum MainCategory { vehiclePosts, subscriptions, payments }
 
 enum SubState { pending, accepted, rejected }
 
@@ -402,45 +402,6 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               recipientRole: 'seller',
             );
           }
-        } else if (category == MainCategory.bidding) {
-          final idx = LocalListingsStore().pendingBids.indexWhere((e) => e['id'] == id);
-          if (idx != -1) {
-            final item = LocalListingsStore().pendingBids.removeAt(idx);
-            LocalListingsStore().acceptedBids.insert(0, {
-              'id': item['id'],
-              'title': item['title'],
-              'price': item['bidAmount'], // approximation
-              'bidderName': item['bidderName'],
-              'ref':
-                  'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-              'time': 'Accepted recently',
-            });
-            final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
-            ClientNotificationStore().addNotification(
-              'Your bid on "${item['title']}" was accepted!',
-              'bid_won',
-              bidderPhone,
-              refId: item['vehicleId'] ?? item['id'],
-              recipientRole: 'buyer',
-            );
-          } else {
-            final item =
-                LocalListingsStore().pendingBids.firstWhere((e) => e['id'] == id);
-            LocalListingsStore().acceptBid({
-              ...item,
-              'ref':
-                  'BID-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-              'time': 'Accepted recently',
-            });
-            final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
-            ClientNotificationStore().addNotification(
-              'Your bid on "${item['title']}" was accepted!',
-              'bid_won',
-              bidderPhone,
-              refId: item['vehicleId'] ?? item['id'],
-              recipientRole: 'buyer',
-            );
-          }
         } else if (category == MainCategory.subscriptions) {
           final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
           if (idx != -1) {
@@ -486,9 +447,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
 
       String msg = category == MainCategory.vehiclePosts
           ? "Vehicle published successfully"
-          : category == MainCategory.bidding
-              ? "Bid accepted"
-              : "Subscription approved";
+          : "Subscription approved";
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
@@ -681,43 +640,6 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
               recipientRole: 'seller',
             );
           }
-        } else if (category == MainCategory.bidding) {
-          final idx = LocalListingsStore().pendingBids.indexWhere((e) => e['id'] == id);
-          if (idx != -1) {
-            final item = LocalListingsStore().pendingBids.removeAt(idx);
-            LocalListingsStore().rejectedBids.insert(0, {
-              'id': item['id'],
-              'title': item['title'],
-              'price': item['bidAmount'],
-              'bidderName': item['bidderName'],
-              'reason': reason,
-              'time': 'Declined recently',
-            });
-            final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
-            ClientNotificationStore().addNotification(
-              'Your bid on "${item['title']}" was not accepted.',
-              'bid_lost',
-              bidderPhone,
-              refId: item['vehicleId'] ?? item['id'],
-              recipientRole: 'buyer',
-            );
-          } else {
-            final item =
-                LocalListingsStore().pendingBids.firstWhere((e) => e['id'] == id);
-            LocalListingsStore().rejectBid({
-              ...item,
-              'reason': reason,
-              'time': 'Declined recently',
-            });
-            final bidderPhone = item['phone'] ?? item['bidderUsername'] ?? '';
-            ClientNotificationStore().addNotification(
-              'Your bid on "${item['title']}" was not accepted.',
-              'bid_lost',
-              bidderPhone,
-              refId: item['vehicleId'] ?? item['id'],
-              recipientRole: 'buyer',
-            );
-          }
         } else if (category == MainCategory.subscriptions) {
           final idx = LocalListingsStore().pendingSubscriptions.indexWhere((e) => e['id'] == id);
           if (idx != -1) {
@@ -863,12 +785,6 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
                   LocalListingsStore().pendingListings.length),
               const SizedBox(width: 12),
               _buildMainCategoryTab(
-                  MainCategory.bidding,
-                  Icons.gavel,
-                  'Bidding',
-                  0),
-              const SizedBox(width: 12),
-              _buildMainCategoryTab(
                   MainCategory.subscriptions,
                   Icons.subscriptions,
                   'Subscriptions',
@@ -944,21 +860,6 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   }
 
   Widget _buildSubStateTabs() {
-    if (_selectedCategory == MainCategory.bidding) {
-      return Container(
-        color: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildSubStateTab(SubState.pending, 'All Active Bids', _navy), // Reuse pending state visually for "All"
-            ],
-          ),
-        ),
-      );
-    }
-
     int? pendingCount;
     int? acceptedCount;
     int? rejectedCount;
@@ -1050,9 +951,6 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
   Widget _buildContentArea() {
     if (_selectedCategory == MainCategory.vehiclePosts) {
       return _buildVehiclePostsContent();
-    }
-    if (_selectedCategory == MainCategory.bidding) {
-      return _buildBiddingContent();
     }
     if (_selectedCategory == MainCategory.subscriptions) {
       return _buildSubscriptionsContent();
@@ -3088,247 +2986,7 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
     );
   }
 
-  // ==========================================
-  // BIDDING
-  // ==========================================
-  Widget _buildBiddingContent() {
-    final allBids = LocalListingsStore().acceptedBids;
-    
-    return _buildListScaffold(
-      headerText: 'ALL ACTIVE BIDS',
-      headerColor: _navy,
-      count: allBids.length,
-      countLabel: 'Total Bids',
-      countBadgeColor: _navy.withValues(alpha: 0.1),
-      countTextColor: _navy,
-      items: allBids,
-      itemBuilder: _buildAcceptedBidCard,
-    );
-  }
 
-  Widget _buildPendingBidCard(Map<String, dynamic> item) {
-    return _buildCardWrapper(
-      itemId: item['id'],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                    color: _navy, borderRadius: BorderRadius.circular(12)),
-                child: Text('AUCTION #${item['auctionId']}',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold)),
-              ),
-              Text(item['timeAgo'],
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item['title'] ?? item['vehicle'] ?? 'Unknown Vehicle',
-                      style: TextStyle(
-                          color: _navy,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                        'Bidder: ${item['bidderName'] ?? item['bidder'] ?? 'Unknown'} (@${item['bidderUsername'] ?? 'unknown'}) • Dealer ID: ${item['dealerId'] ?? 'N/A'}',
-                        style: TextStyle(
-                            color: Colors.grey.shade600, fontSize: 12)),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('SUBMITTED BID',
-                      style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold)),
-                  Text(_formatPrice(item['bidAmount']),
-                      style: TextStyle(
-                          color: _navy,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16)),
-                ],
-              )
-            ],
-          ),
-          
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
-          ),
-          
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('TOKEN DEPOSIT',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.check_circle, size: 14, color: _green),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text('${item['depositAmount']} Paid',
-                              style: TextStyle(color: _green, fontSize: 13, fontWeight: FontWeight.w600)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('ESCROW HOLD',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(item['escrow'],
-                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('DEALER SCORE',
-                        style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(item['score'],
-                        style: TextStyle(color: _navy, fontSize: 13, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
-          ),
-          
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              GestureDetector(
-                onTap: () => _showDocumentViewerPlaceholder(null),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.visibility, color: Colors.blue, size: 16),
-                    SizedBox(width: 6),
-                    Text('View Audit Trail',
-                        style: TextStyle(
-                            color: Colors.blue,
-                            decoration: TextDecoration.underline,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  OutlinedButton(
-                    onPressed: () => _handleReject(item['id'], MainCategory.bidding),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _red,
-                      side: BorderSide(color: _red.withValues(alpha: 0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    child: const Text('✕ Reject Bid'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () => _handleApprove(item['id'], MainCategory.bidding),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _orange,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    child: const Text('✓ Accept Bid'),
-                  ),
-                ],
-              )
-            ],
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAcceptedBidCard(Map<String, dynamic> item) {
-    return _buildHistoryCard(
-      icon: Icons.check_circle,
-      iconColor: _green,
-      title: item['title'] ?? item['vehicle'] ?? 'Unknown Vehicle',
-      subtitle: 'Bidder: ${item['bidderName'] ?? item['bidder'] ?? 'Unknown'} • Ref: #${item['ref'] ?? 'N/A'}',
-      statusLabel: 'Accepted',
-      statusColor: _green,
-      time: item['time'] ?? 'Recently',
-      itemId: item['id'],
-    );
-  }
-
-  Widget _buildRejectedBidCard(Map<String, dynamic> item) {
-    return _buildHistoryCard(
-      icon: Icons.cancel,
-      iconColor: _red,
-      title: item['title'],
-      subtitle: 'Bidder: ${item['bidderName']} • ${item['reason']}',
-      statusLabel: 'Declined',
-      statusColor: _red,
-      time: item['time'],
-    );
-  }
 
   // ==========================================
   // SUBSCRIPTIONS
@@ -4349,25 +4007,6 @@ class _AdminApprovalCenterScreenState extends State<AdminApprovalCenterScreen> {
           )
         ],
       ),
-    );
-  }
-
-  Widget _buildInfoColumn(String label, String value, {Color? valueColor}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: TextStyle(
-                color: Colors.grey.shade500,
-                fontSize: 10,
-                fontWeight: FontWeight.bold)),
-        const SizedBox(height: 2),
-        Text(value,
-            style: TextStyle(
-                color: valueColor ?? _navy,
-                fontSize: 13,
-                fontWeight: FontWeight.w600)),
-      ],
     );
   }
 }

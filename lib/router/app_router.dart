@@ -155,9 +155,9 @@ class AppRouter {
           final highlightId = state.uri.queryParameters['highlightId'];
           
           MainCategory? initialCategory;
-          if (categoryStr == 'bidding') initialCategory = MainCategory.bidding;
           if (categoryStr == 'subscriptions') initialCategory = MainCategory.subscriptions;
           if (categoryStr == 'vehiclePosts') initialCategory = MainCategory.vehiclePosts;
+          if (categoryStr == 'payments') initialCategory = MainCategory.payments;
 
           return AdminApprovalCenterScreen(initialCategory: initialCategory, highlightId: highlightId);
         },
@@ -168,6 +168,10 @@ class AppRouter {
       ),
       GoRoute(
         path: '/admin/bidding',
+        builder: (context, state) => const AdminBiddingScreen(),
+      ),
+      GoRoute(
+        path: '/admin-bidding',
         builder: (context, state) => const AdminBiddingScreen(),
       ),
       GoRoute(

@@ -408,54 +408,15 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
   }
 
   Widget _buildSectionHeader() {
-    final store = AdminClientsStore();
-
-    // Client-only active logins (exclude admin)
-    final clientLogins = store.activeLogins.where((l) {
-      final p = _s(l['phone']);
-      return _isValidClientPhone(p);
-    }).toList();
-
-    String badgeText = '';
-    if (_selectedClientPhone != null) {
-      badgeText = 'Details';
-    } else if (_activeTabIndex == 0) {
-      badgeText = '${_clients.length} Total Clients';
-    } else {
-      badgeText = '${clientLogins.length} Active Logins';
-    }
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 12,
-        runSpacing: 6,
-        children: [
-          Text(
-            '1. Clients Details',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: _navy,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: _orange,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              badgeText,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
+      child: Text(
+        '1. Clients Details',
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: _navy,
+        ),
       ),
     );
   }
@@ -540,7 +501,7 @@ class _AdminClientsDetailsScreenState extends State<AdminClientsDetailsScreen> {
       badgeColor = _orange;
       badgeTextColor = Colors.white;
     } else {
-      title = 'Active Client Sessions (${clientLogins.length})';
+      title = 'Active Client Sessions';
       badgeText = '${clientLogins.length} Active Logins';
     }
 

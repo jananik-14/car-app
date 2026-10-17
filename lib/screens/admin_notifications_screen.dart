@@ -26,57 +26,102 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   }
 
   IconData _iconForType(String type) {
-    switch (type) {
+    final t = type.toLowerCase();
+    if (t == 'bid' ||
+        t == 'bid_placed' ||
+        t == 'auction_ended' ||
+        t == 'bidding' ||
+        t.contains('bid') ||
+        t.contains('auction')) {
+      return Icons.gavel;
+    }
+    switch (t) {
       case 'login': return Icons.login;
-      case 'bid': return Icons.gavel;
-      case 'listing': return Icons.directions_car;
+      case 'listing':
+      case 'vehicle_post':
+      case 'vehicleposts':
+        return Icons.directions_car;
       case 'client': return Icons.person_add;
-      case 'subscription': return Icons.subscriptions;
+      case 'subscription':
+      case 'subscriptions':
+        return Icons.subscriptions;
       case 'profile_edit': return Icons.edit;
-      case 'payment': return Icons.account_balance_wallet;
+      case 'payment':
+      case 'payments':
+        return Icons.account_balance_wallet;
       default: return Icons.notifications;
     }
   }
 
   Color _colorForType(String type) {
-    switch (type) {
+    final t = type.toLowerCase();
+    if (t == 'bid' ||
+        t == 'bid_placed' ||
+        t == 'auction_ended' ||
+        t == 'bidding' ||
+        t.contains('bid') ||
+        t.contains('auction')) {
+      return const Color(0xFFfb7800);
+    }
+    switch (t) {
       case 'login': return const Color(0xFF06B6D4);
-      case 'bid': return const Color(0xFFfb7800);
-      case 'listing': return const Color(0xFF001128);
+      case 'listing':
+      case 'vehicle_post':
+      case 'vehicleposts':
+        return const Color(0xFF001128);
       case 'client': return const Color(0xFF3B82F6);
-      case 'subscription': return const Color(0xFF8B5CF6);
+      case 'subscription':
+      case 'subscriptions':
+        return const Color(0xFF8B5CF6);
       case 'profile_edit': return const Color(0xFF64748B);
-      case 'payment': return const Color(0xFF22C55E);
+      case 'payment':
+      case 'payments':
+        return const Color(0xFF22C55E);
       default: return Colors.grey;
     }
   }
 
   void _onNotificationTap(AdminNotificationItem notification) {
-    switch (notification.type) {
+    final type = notification.type.toLowerCase();
+
+    // Bid placed, auction ended, bid-related types -> /admin-bidding
+    if (type == 'bid' ||
+        type == 'bid_placed' ||
+        type == 'auction_ended' ||
+        type == 'bidding' ||
+        type.contains('bid') ||
+        type.contains('auction')) {
+      context.go('/admin-bidding');
+      return;
+    }
+
+    switch (type) {
       case 'login':
       case 'client':
       case 'profile_edit':
-        context.push('/admin');
-        break;
-      case 'bid':
-        final bidId = notification.relatedItemId;
-        final bidQuery = bidId != null ? '?category=bidding&highlightId=$bidId' : '?category=bidding';
-        context.push('/admin-approval$bidQuery');
+        context.go('/admin');
         break;
       case 'listing':
+      case 'vehicle_post':
+      case 'vehicleposts':
         final listId = notification.relatedItemId;
         final listQuery = listId != null ? '?category=vehiclePosts&highlightId=$listId' : '?category=vehiclePosts';
-        context.push('/admin-approval$listQuery');
+        context.go('/admin-approval$listQuery');
         break;
       case 'subscription':
+      case 'subscriptions':
         final subId = notification.relatedItemId;
         final subQuery = subId != null ? '?category=subscriptions&highlightId=$subId' : '?category=subscriptions';
-        context.push('/admin-approval$subQuery');
+        context.go('/admin-approval$subQuery');
         break;
       case 'payment':
+      case 'payments':
         final payId = notification.relatedItemId;
         final payQuery = payId != null ? '?category=payments&highlightId=$payId' : '?category=payments';
-        context.push('/admin-approval$payQuery');
+        context.go('/admin-approval$payQuery');
+        break;
+      default:
+        context.go('/admin');
         break;
     }
   }
